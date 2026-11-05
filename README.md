@@ -53,7 +53,7 @@ Windows 10 / 11 x64：
 中文输入「把视频转成 gif 的工具」
    ↓  词表最长匹配 + 同义词展开
 [video] [convert] [gif]
-   ↓  概念组合塌缩 / 弱概念裁剪（压到 ≤3 个词）
+   ↓  概念组合塌缩 / 弱概念裁剪（通常压到 3 个词）
 "video convert gif" + archived:false
    ↓  GitHub Search API（best match）
 结果先渲染 → 并发 6 路调用翻译 → 译文逐条替换
@@ -72,9 +72,11 @@ cd src-tauri
 cargo tauri build
 ```
 
-Windows 上用 MSVC 工具链即可。开发环境也可以使用 GNU 宿主工具链（`stable-x86_64-pc-windows-gnu` + MinGW-w64）；`build.bat` 会自动检测本机的本地工具链目录，未检测到时直接使用系统 PATH。
+Windows 上用 MSVC 工具链即可。开发环境也可以使用 GNU 宿主工具链（`stable-x86_64-pc-windows-gnu` + MinGW-w64）。
 
-> 如果 NSIS 下载超时，可手动把 `nsis-3.13.zip` 与 `nsis_tauri_utils.dll` 放进 `src-tauri/target/.tauri/NSIS`，并保留 `tauri.conf.json` 里的 `"useLocalToolsDir": true`。
+`build.bat` 会优先读取环境变量 `GH_FINDER_TOOLS_DIR`，其次检查仓库同级的 `tools` 目录（即 `..\tools`）；都没有时直接使用系统 PATH 里的 Rust / Tauri CLI。
+
+> 如果 NSIS 下载超时，可手动准备离线缓存：把 `nsis-3.13.zip` 解压，将解压目录里的内容直接放到 `src-tauri/target/.tauri/NSIS/`（确保 `NSIS.exe` 就在这一层），再把 `nsis_tauri_utils.dll` 放到 `src-tauri/target/.tauri/NSIS/Plugins/x86-unicode/additional/`，并保留 `tauri.conf.json` 里的 `"useLocalToolsDir": true`。
 
 ## 目录结构
 

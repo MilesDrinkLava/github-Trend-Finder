@@ -103,6 +103,13 @@ fn token_paths() -> Vec<PathBuf> {
         }
     }
     if let Ok(appdata) = std::env::var("APPDATA") {
+        // 与 tauri.conf.json 的 identifier 对齐，卸载器才能一并清理。
+        out.push(
+            PathBuf::from(&appdata)
+                .join("com.ghfinder.desktop")
+                .join("token.txt"),
+        );
+        // 兼容 v1.0.0 早期构建的旧路径。
         out.push(PathBuf::from(appdata).join("gh-finder").join("token.txt"));
     }
     if let Ok(cwd) = std::env::current_dir() {
@@ -115,6 +122,24 @@ fn token_paths() -> Vec<PathBuf> {
         }
     }
     out
+}
+
+/// 把旧版 `%APPDATA%\gh-finder\token.txt` 迁到卸载器会清理的目录。
+/// 只在旧文件存在、新文件不存在且复制成功时删除旧文件。
+fn migrate_legacy_token() {
+    let Ok(appdata) = std::env::var("APPDATA") else {
+        return;
+    };
+    let old_dir = PathBuf::from(&appdata).join("gh-finder");
+    let old = old_dir.join("token.txt");
+    let new_dir = PathBuf::from(&appdata).join("com.ghfinder.desktop");
+    let new = new_dir.join("token.txt");
+    if old.is_file() && !new.exists() && std::fs::create_dir_all(&new_dir).is_ok() {
+        if std::fs::copy(&old, &new).is_ok() {
+            let _ = std::fs::remove_file(&old);
+            let _ = std::fs::remove_dir(&old_dir);
+        }
+    }
 }
 
 fn load_token() -> Option<String> {
@@ -456,7 +481,7 @@ fn save_token(token: String) -> Result<bool, String> {
         return Ok(false);
     }
     let appdata = std::env::var("APPDATA").map_err(|_| "找不到 APPDATA 目录".to_string())?;
-    let dir = PathBuf::from(appdata).join("gh-finder");
+    let dir = PathBuf::from(appdata).join("com.ghfinder.desktop");
     std::fs::create_dir_all(&dir).map_err(|e| format!("创建配置目录失败：{e}"))?;
     std::fs::write(dir.join("token.txt"), t).map_err(|e| format!("写入 token 失败：{e}"))?;
     Ok(true)
@@ -482,6 +507,7 @@ fn win_close(window: tauri::WebviewWindow) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    migrate_legacy_token();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .user_agent("gh-finder/1.0")
