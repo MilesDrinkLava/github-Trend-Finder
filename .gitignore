@@ -1,0 +1,21 @@
+# Rust / Tauri
+src-tauri/target/
+**/*.rs.bk
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地数据与日志
+data/*.db
+crawl.log
+eval.log
+token.txt
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

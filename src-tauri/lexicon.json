@@ -1,0 +1,1135 @@
+{
+ "concepts": {
+  "批量重命名": [
+   "batch rename",
+   "bulk rename",
+   "renamer",
+   "mass rename"
+  ],
+  "重命名": [
+   "rename",
+   "renamer",
+   "mv"
+  ],
+  "批量": [
+   "batch",
+   "bulk",
+   "mass"
+  ],
+  "文件管理": [
+   "file manager",
+   "file-manager",
+   "filebrowser"
+  ],
+  "文件同步": [
+   "file sync",
+   "syncthing",
+   "rsync",
+   "sync"
+  ],
+  "文件传输": [
+   "file transfer",
+   "file sharing",
+   "file-sharing"
+  ],
+  "文件系统": [
+   "filesystem",
+   "file system"
+  ],
+  "备份": [
+   "backup"
+  ],
+  "恢复": [
+   "restore",
+   "recovery"
+  ],
+  "解压": [
+   "unzip",
+   "extract",
+   "decompress"
+  ],
+  "压缩": [
+   "compress",
+   "zip",
+   "archive",
+   "compression"
+  ],
+  "拖拽": [
+   "drag and drop",
+   "drag-and-drop",
+   "dnd"
+  ],
+  "去重": [
+   "deduplicate",
+   "dedup",
+   "duplicate finder"
+  ],
+  "文本编辑": [
+   "text editor"
+  ],
+  "编辑器": [
+   "editor"
+  ],
+  "笔记": [
+   "note",
+   "notes",
+   "note-taking"
+  ],
+  "知识库": [
+   "knowledge base",
+   "knowledge-base",
+   "wiki"
+  ],
+  "文档": [
+   "document",
+   "docs",
+   "documentation"
+  ],
+  "博客": [
+   "blog"
+  ],
+  "搜索": [
+   "search",
+   "find",
+   "lookup"
+  ],
+  "全文搜索": [
+   "full text search",
+   "full-text-search",
+   "fts"
+  ],
+  "正则": [
+   "regex",
+   "regular expression",
+   "regexp"
+  ],
+  "格式化": [
+   "formatter",
+   "formatting",
+   "pretty print"
+  ],
+  "语法高亮": [
+   "syntax highlighting",
+   "syntax-highlighting",
+   "highlight"
+  ],
+  "翻译": [
+   "translate",
+   "translation",
+   "translator"
+  ],
+  "拼写检查": [
+   "spell check",
+   "spellcheck",
+   "spelling"
+  ],
+  "爬虫": [
+   "crawler",
+   "scraper",
+   "spider",
+   "crawl",
+   "scrape"
+  ],
+  "抓取": [
+   "scrape",
+   "fetch",
+   "crawl"
+  ],
+  "下载": [
+   "download",
+   "downloader"
+  ],
+  "上传": [
+   "upload",
+   "uploader"
+  ],
+  "代理": [
+   "proxy"
+  ],
+  "内网穿透": [
+   "tunnel",
+   "nat traversal",
+   "frp",
+   "ngrok"
+  ],
+  "网页": [
+   "web page",
+   "webpage",
+   "html"
+  ],
+  "网站": [
+   "website",
+   "web app",
+   "webapp"
+  ],
+  "接口": [
+   "api",
+   "rest api",
+   "rest-api"
+  ],
+  "服务端": [
+   "server",
+   "backend"
+  ],
+  "前端": [
+   "frontend",
+   "front-end",
+   "ui"
+  ],
+  "后端": [
+   "backend",
+   "back-end"
+  ],
+  "全栈": [
+   "fullstack",
+   "full-stack"
+  ],
+  "浏览器": [
+   "browser"
+  ],
+  "书签": [
+   "bookmark",
+   "bookmarks"
+  ],
+  "界面": [
+   "ui",
+   "interface",
+   "gui"
+  ],
+  "管理面板": [
+   "admin panel",
+   "admin dashboard",
+   "admin-panel"
+  ],
+  "仪表盘": [
+   "dashboard"
+  ],
+  "图表": [
+   "chart",
+   "graph",
+   "plot",
+   "visualization"
+  ],
+  "可视化": [
+   "visualization",
+   "visualize",
+   "dataviz"
+  ],
+  "表格": [
+   "table",
+   "spreadsheet",
+   "datagrid",
+   "data grid"
+  ],
+  "主题": [
+   "theme"
+  ],
+  "插件": [
+   "plugin",
+   "extension"
+  ],
+  "组件": [
+   "component",
+   "widget"
+  ],
+  "动画": [
+   "animation",
+   "animate"
+  ],
+  "数据库": [
+   "database",
+   "db"
+  ],
+  "缓存": [
+   "cache",
+   "caching"
+  ],
+  "队列": [
+   "queue",
+   "message queue",
+   "message-queue"
+  ],
+  "消息": [
+   "message",
+   "messaging"
+  ],
+  "日志": [
+   "log",
+   "logging"
+  ],
+  "监控": [
+   "monitoring",
+   "monitor",
+   "observability"
+  ],
+  "指标": [
+   "metrics"
+  ],
+  "数据集": [
+   "dataset"
+  ],
+  "数据迁移": [
+   "migration",
+   "migrate"
+  ],
+  "数据": [
+   "data"
+  ],
+  "机器学习": [
+   "machine learning",
+   "machine-learning",
+   "ml"
+  ],
+  "深度学习": [
+   "deep learning",
+   "deep-learning"
+  ],
+  "神经网络": [
+   "neural network",
+   "neural-network"
+  ],
+  "大模型": [
+   "llm",
+   "large language model",
+   "gpt"
+  ],
+  "自然语言": [
+   "nlp",
+   "natural language",
+   "natural-language"
+  ],
+  "图像识别": [
+   "image recognition",
+   "image classification"
+  ],
+  "目标检测": [
+   "object detection",
+   "object-detection"
+  ],
+  "语音识别": [
+   "speech recognition",
+   "asr"
+  ],
+  "语音合成": [
+   "text to speech",
+   "tts",
+   "speech synthesis"
+  ],
+  "文字识别": [
+   "ocr",
+   "text recognition"
+  ],
+  "训练": [
+   "training",
+   "train"
+  ],
+  "推理": [
+   "inference"
+  ],
+  "微调": [
+   "fine-tuning",
+   "finetune"
+  ],
+  "提示词": [
+   "prompt",
+   "prompt engineering"
+  ],
+  "向量": [
+   "vector",
+   "embedding"
+  ],
+  "检索增强": [
+   "rag",
+   "retrieval augmented generation"
+  ],
+  "智能体": [
+   "agent",
+   "agents"
+  ],
+  "自动化": [
+   "automation",
+   "automate"
+  ],
+  "脚本": [
+   "script",
+   "scripting"
+  ],
+  "命令行": [
+   "command line",
+   "cli",
+   "command-line"
+  ],
+  "终端": [
+   "terminal",
+   "tui"
+  ],
+  "快捷键": [
+   "hotkey",
+   "shortcut",
+   "keybinding"
+  ],
+  "定时": [
+   "scheduler",
+   "cron",
+   "scheduled"
+  ],
+  "工作流": [
+   "workflow",
+   "pipeline"
+  ],
+  "任务": [
+   "task",
+   "job"
+  ],
+  "脚手架": [
+   "boilerplate",
+   "scaffold",
+   "starter",
+   "template"
+  ],
+  "模板": [
+   "template",
+   "boilerplate"
+  ],
+  "框架": [
+   "framework"
+  ],
+  "库": [
+   "library",
+   "lib"
+  ],
+  "构建": [
+   "build",
+   "bundler"
+  ],
+  "打包": [
+   "bundler",
+   "packaging",
+   "packager"
+  ],
+  "编译": [
+   "compiler",
+   "compile"
+  ],
+  "调试": [
+   "debug",
+   "debugger"
+  ],
+  "测试": [
+   "test",
+   "testing"
+  ],
+  "性能": [
+   "performance",
+   "benchmark"
+  ],
+  "部署": [
+   "deploy",
+   "deployment"
+  ],
+  "容器": [
+   "container",
+   "docker"
+  ],
+  "编排": [
+   "orchestration",
+   "kubernetes"
+  ],
+  "版本控制": [
+   "version control",
+   "git"
+  ],
+  "代码审查": [
+   "code review",
+   "code-review"
+  ],
+  "文档生成": [
+   "documentation generator",
+   "docs generator"
+  ],
+  "加密": [
+   "encryption",
+   "encrypt",
+   "crypto",
+   "cryptography"
+  ],
+  "解密": [
+   "decrypt",
+   "decryption"
+  ],
+  "密码": [
+   "password"
+  ],
+  "密码管理": [
+   "password manager",
+   "password-manager"
+  ],
+  "密钥": [
+   "key",
+   "secret",
+   "keys"
+  ],
+  "认证": [
+   "authentication",
+   "auth"
+  ],
+  "授权": [
+   "authorization",
+   "oauth"
+  ],
+  "权限": [
+   "permission",
+   "rbac"
+  ],
+  "漏洞": [
+   "vulnerability",
+   "cve"
+  ],
+  "扫描": [
+   "scanner",
+   "scan"
+  ],
+  "安全": [
+   "security"
+  ],
+  "图片": [
+   "image",
+   "picture",
+   "photo"
+  ],
+  "图片处理": [
+   "image processing",
+   "image manipulation",
+   "image-processing"
+  ],
+  "视频": [
+   "video"
+  ],
+  "视频处理": [
+   "video processing",
+   "video-processing"
+  ],
+  "音频": [
+   "audio",
+   "sound"
+  ],
+  "剪辑": [
+   "editor",
+   "cutting"
+  ],
+  "截图": [
+   "screenshot",
+   "capture"
+  ],
+  "录屏": [
+   "screen recording",
+   "screen recorder",
+   "screen-recorder"
+  ],
+  "字幕": [
+   "subtitle",
+   "subtitles",
+   "srt"
+  ],
+  "转码": [
+   "transcode",
+   "transcoding",
+   "ffmpeg"
+  ],
+  "播放器": [
+   "player"
+  ],
+  "阅读器": [
+   "reader"
+  ],
+  "桌面": [
+   "desktop",
+   "windows",
+   "macos",
+   "linux"
+  ],
+  "移动端": [
+   "mobile"
+  ],
+  "安卓": [
+   "android"
+  ],
+  "苹果": [
+   "ios",
+   "macos"
+  ],
+  "跨平台": [
+   "cross-platform",
+   "cross platform"
+  ],
+  "系统": [
+   "system",
+   "os"
+  ],
+  "进程": [
+   "process"
+  ],
+  "磁盘": [
+   "disk"
+  ],
+  "游戏": [
+   "game"
+  ],
+  "引擎": [
+   "engine"
+  ],
+  "地图": [
+   "map",
+   "maps"
+  ],
+  "天气": [
+   "weather"
+  ],
+  "股票": [
+   "stock",
+   "finance"
+  ],
+  "音乐": [
+   "music"
+  ],
+  "待办": [
+   "todo",
+   "task list",
+   "todo-list"
+  ],
+  "日历": [
+   "calendar"
+  ],
+  "提醒": [
+   "reminder",
+   "notification"
+  ],
+  "通知": [
+   "notification",
+   "notify"
+  ],
+  "邮件": [
+   "email",
+   "mail"
+  ],
+  "聊天": [
+   "chat",
+   "messaging"
+  ],
+  "机器人": [
+   "bot"
+  ],
+  "文件": [
+   "file",
+   "files"
+  ],
+  "文件夹": [
+   "folder",
+   "directory",
+   "dir"
+  ],
+  "目录": [
+   "directory",
+   "dir"
+  ],
+  "转换": [
+   "convert",
+   "conversion",
+   "converter"
+  ],
+  "格式转换": [
+   "format conversion",
+   "converter",
+   "convert"
+  ],
+  "合并": [
+   "merge",
+   "combine",
+   "concat"
+  ],
+  "拆分": [
+   "split",
+   "separate"
+  ],
+  "导入": [
+   "import",
+   "importer"
+  ],
+  "导出": [
+   "export",
+   "exporter"
+  ],
+  "查找替换": [
+   "find and replace",
+   "search and replace",
+   "replace"
+  ],
+  "替换": [
+   "replace",
+   "replacer"
+  ],
+  "对比": [
+   "diff",
+   "compare",
+   "comparison"
+  ],
+  "差异": [
+   "diff",
+   "difference"
+  ],
+  "预览": [
+   "preview"
+  ],
+  "生成": [
+   "generate",
+   "generator"
+  ],
+  "解析": [
+   "parser",
+   "parse"
+  ],
+  "提取": [
+   "extract",
+   "extraction"
+  ],
+  "安装": [
+   "install",
+   "installer"
+  ],
+  "卸载": [
+   "uninstall"
+  ],
+  "复制": [
+   "copy",
+   "clone"
+  ],
+  "粘贴": [
+   "paste"
+  ],
+  "剪贴板": [
+   "clipboard"
+  ],
+  "历史": [
+   "history"
+  ],
+  "记录": [
+   "record",
+   "history"
+  ],
+  "统计": [
+   "statistics",
+   "stats"
+  ],
+  "报表": [
+   "report",
+   "reporting"
+  ],
+  "清理": [
+   "cleaner",
+   "cleanup",
+   "clean"
+  ],
+  "优化": [
+   "optimize",
+   "optimization"
+  ],
+  "本地": [
+   "local",
+   "offline"
+  ],
+  "转成": [
+   "convert",
+   "conversion",
+   "convert to"
+  ],
+  "转": [
+   "convert",
+   "convert to"
+  ],
+  "自建": [
+   "self-hosted",
+   "selfhosted",
+   "self hosted"
+  ],
+  "搭建": [
+   "build",
+   "deploy",
+   "setup",
+   "host"
+  ],
+  "自己搭": [
+   "self-hosted",
+   "selfhosted",
+   "self hosted"
+  ],
+  "离线": [
+   "offline",
+   "local"
+  ],
+  "在线": [
+   "online",
+   "web"
+  ],
+  "自托管": [
+   "self-hosted",
+   "selfhosted"
+  ],
+  "轻量": [
+   "lightweight",
+   "tiny"
+  ],
+  "快速": [
+   "fast",
+   "quick",
+   "blazing"
+  ],
+  "多语言": [
+   "i18n",
+   "internationalization",
+   "multilingual"
+  ],
+  "内存": [
+   "memory"
+  ],
+  "硬件": [
+   "hardware"
+  ],
+  "驱动": [
+   "driver",
+   "drivers"
+  ],
+  "设备": [
+   "device"
+  ],
+  "串口": [
+   "serial port",
+   "serial"
+  ],
+  "蓝牙": [
+   "bluetooth",
+   "ble"
+  ],
+  "摄像头": [
+   "camera",
+   "webcam"
+  ],
+  "麦克风": [
+   "microphone",
+   "mic",
+   "audio input"
+  ],
+  "传感器": [
+   "sensor",
+   "sensors"
+  ],
+  "无人机": [
+   "drone"
+  ],
+  "导航": [
+   "navigation",
+   "navigate"
+  ],
+  "定位": [
+   "location",
+   "geolocation",
+   "gps"
+  ],
+  "壁纸": [
+   "wallpaper"
+  ],
+  "托盘": [
+   "system tray",
+   "tray"
+  ],
+  "启动器": [
+   "launcher",
+   "launch"
+  ],
+  "菜单": [
+   "menu"
+  ],
+  "服务器": [
+   "server"
+  ],
+  "客户端": [
+   "client"
+  ],
+  "协议": [
+   "protocol"
+  ],
+  "网络": [
+   "network",
+   "networking"
+  ],
+  "测速": [
+   "speedtest",
+   "bandwidth"
+  ],
+  "加速": [
+   "accelerator",
+   "boost",
+   "speed up"
+  ],
+  "压测": [
+   "stress test",
+   "load test",
+   "load-test"
+  ],
+  "基准": [
+   "benchmark",
+   "benchmarking"
+  ],
+  "反爬": [
+   "anti-scraping",
+   "anti-bot",
+   "bypass"
+  ],
+  "代理池": [
+   "proxy pool",
+   "proxy-pool"
+  ],
+  "验证码": [
+   "captcha"
+  ],
+  "商城": [
+   "shop",
+   "store",
+   "ecommerce",
+   "e-commerce"
+  ],
+  "电商": [
+   "ecommerce",
+   "e-commerce"
+  ],
+  "支付": [
+   "payment",
+   "pay"
+  ],
+  "账单": [
+   "billing",
+   "invoice"
+  ],
+  "局域网": [
+   "lan",
+   "local network",
+   "local-network",
+   "local area network"
+  ],
+  "传文件": [
+   "file transfer",
+   "file sharing",
+   "send file"
+  ],
+  "识别": [
+   "recognition",
+   "recognize",
+   "ocr",
+   "detect"
+  ],
+  "文字": [
+   "text",
+   "ocr"
+  ],
+  "代码补全": [
+   "code completion",
+   "code-completion",
+   "autocomplete",
+   "intellisense",
+   "copilot"
+  ],
+  "补全": [
+   "completion",
+   "autocomplete"
+  ],
+  "保存": [
+   "save",
+   "export"
+  ],
+  "下载器": [
+   "downloader",
+   "download"
+  ],
+  "电子书": [
+   "ebook",
+   "e-book"
+  ]
+ },
+ "filler": [
+  "一个",
+  "一些",
+  "上",
+  "下",
+  "东西",
+  "个",
+  "中",
+  "中文",
+  "了",
+  "些",
+  "什么",
+  "做",
+  "写",
+  "功能",
+  "可以",
+  "和",
+  "器",
+  "在",
+  "好",
+  "好用",
+  "好看",
+  "实现",
+  "小工具",
+  "工具",
+  "帮我",
+  "应用",
+  "开源",
+  "很",
+  "想",
+  "想要",
+  "成",
+  "我",
+  "或者",
+  "手机",
+  "找",
+  "找到",
+  "把",
+  "推荐",
+  "支持",
+  "最好",
+  "有没有",
+  "查看",
+  "比较",
+  "状态",
+  "用",
+  "用于",
+  "用来",
+  "的",
+  "程序",
+  "给",
+  "能",
+  "能够",
+  "自动",
+  "被",
+  "要",
+  "跑",
+  "跟",
+  "软件",
+  "还是",
+  "这种",
+  "那种",
+  "里",
+  "需要",
+  "项目"
+ ],
+ "combos": [
+  [
+   [
+    "文字",
+    "识别"
+   ],
+   [
+    "图片",
+    "文字",
+    "识别"
+   ],
+   [
+    "ocr"
+   ]
+  ],
+  [
+   [
+    "图片",
+    "识别"
+   ],
+   [
+    "图片",
+    "文字",
+    "识别"
+   ],
+   [
+    "ocr"
+   ]
+  ],
+  [
+   [
+    "epub",
+    "mobi"
+   ],
+   [
+    "azw3",
+    "epub",
+    "mobi",
+    "格式转换",
+    "转",
+    "转成",
+    "转换"
+   ],
+   [
+    "ebook converter"
+   ]
+  ],
+  [
+   [
+    "azw3",
+    "epub"
+   ],
+   [
+    "azw3",
+    "epub",
+    "mobi",
+    "格式转换",
+    "转",
+    "转成",
+    "转换"
+   ],
+   [
+    "ebook converter"
+   ]
+  ],
+  [
+   [
+    "azw3",
+    "mobi"
+   ],
+   [
+    "azw3",
+    "epub",
+    "mobi",
+    "格式转换",
+    "转",
+    "转成",
+    "转换"
+   ],
+   [
+    "ebook converter"
+   ]
+  ],
+  [
+   [
+    "文本编辑",
+    "终端"
+   ],
+   [
+    "文本编辑"
+   ],
+   [
+    "editor"
+   ]
+  ],
+  [
+   [
+    "代码补全",
+    "编辑器"
+   ],
+   [
+    "编辑器"
+   ],
+   null
+  ]
+ ],
+ "weak": [
+  "保存",
+  "客户端",
+  "桌面",
+  "生成"
+ ]
+}
