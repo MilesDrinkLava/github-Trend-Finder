@@ -2,6 +2,17 @@
 
 当前版本：**V1.1**（内部版本 `1.1.0`）；上一版为 **V1.0**（`1.0.0`）。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
+## 版本选择
+
+两个版本分别保留独立发布页、安装包和完整源码快照：
+
+| 版本 | 独立发布页与安装包 | 完整源码 |
+|---|---|---|
+| **V1.1 · 审计与词库增强版**（当前） | [下载 V1.1](https://github.com/MilesDrinkLava/github-Trend-Finder/releases/tag/v1.1.0) | [v1.1.0 源码](https://github.com/MilesDrinkLava/github-Trend-Finder/tree/v1.1.0) |
+| **V1.0 · 原始版** | [下载 V1.0](https://github.com/MilesDrinkLava/github-Trend-Finder/releases/tag/v1.0.0) | [v1.0.0 源码](https://github.com/MilesDrinkLava/github-Trend-Finder/tree/v1.0.0) |
+
+V1.0 的原标签和原安装包保持不变。请按所需版本进入对应发布页下载；两版安装为同一应用的升级关系。
+
 > 用中文搜 GitHub 开源项目。只补中文到英文的术语映射，搜索与排序全部交回 GitHub。
 
 ![搜索界面](docs/screenshot-search.png)
