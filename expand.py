@@ -8,11 +8,20 @@
 
 from lexicon import (
     CONCEPTS, FILLER, COMBOS, WEAK_CONCEPTS,
-    _KEYS_BY_LEN, _FILLER_BY_LEN,
+    _KEYS_BY_LEN, _FILLER_BY_LEN, ASCII_ALIASES, CHAR_MAP, CONCEPT_ALIASES,
 )
 
-_ASCII_WORD_CHARS = set("-_.")
+_ASCII_WORD_CHARS = set("-_.+#")
 CJK_START, CJK_END = "一", "鿿"
+
+
+def normalize_query(query: str) -> str:
+    """全角 ASCII / 空格和常见繁体字统一；字符数保持不变。"""
+    return "".join(
+        CHAR_MAP.get(ch, ch) if not ("！" <= ch <= "～" or ch == "　")
+        else (" " if ch == "　" else chr(ord(ch) - 0xFEE0))
+        for ch in query
+    ).lower()
 
 
 def _postprocess(groups, keys):
@@ -60,6 +69,8 @@ def _is_cjk(ch: str) -> bool:
 
 def analyze(query: str) -> dict:
     """完整解析结果，供调试和覆盖率统计。"""
+    original_query = query
+    query = normalize_query(query)
     groups, keys, raw_cn, seen = [], [], [], set()
     buf = []
     matched_chars = 0
@@ -88,7 +99,8 @@ def analyze(query: str) -> dict:
             j = i
             while j < n and _is_ascii_word_char(query[j]):
                 j += 1
-            w = query[i:j].lower().strip("-_.")
+            raw_word = query[i:j].strip("-_")
+            w = ASCII_ALIASES.get(raw_word, raw_word.strip("."))
             if w:
                 add([w], w)
             i = j
@@ -98,27 +110,29 @@ def analyze(query: str) -> dict:
         hit = next((k for k in _KEYS_BY_LEN if query.startswith(k, i)), None)
         if hit:
             flush()
-            add(CONCEPTS[hit], hit)
-            matched_chars += len(hit)
+            add(CONCEPTS[hit], CONCEPT_ALIASES.get(hit, hit))
+            matched_chars += sum(_is_cjk(c) for c in hit)
             i += len(hit)
             continue
 
         hit = next((k for k in _FILLER_BY_LEN if query.startswith(k, i)), None)
         if hit:
             flush()
-            matched_chars += len(hit)  # 填充词是「有意丢弃」，不算未覆盖
+            matched_chars += sum(_is_cjk(c) for c in hit)
             i += len(hit)
             continue
 
         if _is_cjk(ch):
             buf.append(ch)
+        else:
+            flush()
         i += 1
 
     flush()
     groups, keys = _postprocess(groups, keys)
     coverage = matched_chars / total_cjk if total_cjk else 1.0
     return {
-        "query": query,
+        "query": original_query,
         "groups": groups,
         "keys": keys,
         "raw_cn": raw_cn,

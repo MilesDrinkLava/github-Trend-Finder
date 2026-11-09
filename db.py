@@ -80,7 +80,8 @@ END;
 
 
 def connect(path: str = DB_PATH) -> sqlite3.Connection:
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    parent = os.path.dirname(os.path.abspath(path))
+    os.makedirs(parent, exist_ok=True)
     con = sqlite3.connect(path)
     con.row_factory = sqlite3.Row
     con.executescript(SCHEMA)

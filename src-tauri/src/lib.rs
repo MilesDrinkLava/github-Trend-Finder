@@ -1,7 +1,11 @@
 mod lexicon;
+mod policy;
+use policy::retry_delay;
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -17,7 +21,9 @@ pub struct AppState {
     lex: Lexicon,
     client: reqwest::Client,
     cache: Mutex<HashMap<String, (Instant, Vec<Item>)>>,
-    trend_cache: Mutex<HashMap<String, (Instant, Vec<Item>)>>,
+    request_gate: tokio::sync::Mutex<Instant>,
+    search_generation: AtomicU64,
+    trend_generation: AtomicU64,
     trans_cache: Mutex<HashMap<String, String>>,
 }
 
@@ -39,6 +45,8 @@ pub struct SearchResponse {
     pub query: String,
     pub english: String,
     pub groups: Vec<Vec<String>>,
+    pub keys: Vec<String>,
+    pub coverage: f64,
     pub raw_cn: Vec<String>,
     pub source: String,
     pub items: Vec<Item>,
@@ -169,13 +177,107 @@ fn short_error(status: u16) -> String {
     }
 }
 
+// 搜索与发现共享配额和在途锁。缓存按凭据、条数、排序隔离；排队旧查询不会继续烧配额。
+impl AppState {
+    async fn github_items(
+        &self,
+        q: &str,
+        limit: usize,
+        sort: &str,
+        ttl: Duration,
+        generation: &AtomicU64,
+        request_id: u64,
+    ) -> Result<(Vec<Item>, bool), String> {
+        let token = load_token();
+        let mut scope = std::collections::hash_map::DefaultHasher::new();
+        token.hash(&mut scope);
+        let key = format!("{}|{limit}|{sort}|{q}", scope.finish());
+        let cached = || {
+            self.cache.lock().ok().and_then(|cache| {
+                cache
+                    .get(&key)
+                    .filter(|(at, _)| at.elapsed() < ttl)
+                    .map(|(_, items)| items.clone())
+            })
+        };
+        if let Some(items) = cached() {
+            return Ok((items, true));
+        }
+        let mut next = self.request_gate.lock().await;
+        if let Some(items) = cached() {
+            return Ok((items, true));
+        }
+        if *next > Instant::now() {
+            let remaining = next.saturating_duration_since(Instant::now());
+            if remaining > Duration::from_secs(7) {
+                return Err(format!(
+                    "GitHub 请求冷却中，请在 {} 秒后再试",
+                    remaining.as_secs() + 1
+                ));
+            }
+            tokio::time::sleep_until((*next).into()).await;
+        }
+        if generation.load(Ordering::Relaxed) != request_id {
+            return Err("查询已被更新".into());
+        }
+        *next = Instant::now() + Duration::from_millis(if token.is_some() { 2100 } else { 6200 });
+        let mut req = self
+            .client
+            .get(API)
+            .query(&[
+                ("q", q.to_string()),
+                ("per_page", limit.to_string()),
+                ("order", "desc".into()),
+            ])
+            .header("Accept", "application/vnd.github+json")
+            .header("X-GitHub-Api-Version", "2022-11-28");
+        if !sort.is_empty() {
+            req = req.query(&[("sort", sort)]);
+        }
+        if let Some(t) = token {
+            req = req.bearer_auth(t);
+        }
+        let resp = req.send().await.map_err(|e| {
+            if e.is_timeout() {
+                "连接 GitHub 超时，检查网络或代理".into()
+            } else if e.is_connect() {
+                "连不上 GitHub，检查网络或代理".into()
+            } else {
+                format!("网络错误：{e}")
+            }
+        })?;
+        let status = resp.status();
+        if status.as_u16() == 429 || status.as_u16() == 403 {
+            let delay = retry_delay(resp.headers());
+            *next = Instant::now() + delay;
+            return Err(format!(
+                "GitHub 暂时拒绝请求，请在 {} 秒后再试",
+                delay.as_secs()
+            ));
+        }
+        if !status.is_success() {
+            return Err(short_error(status.as_u16()));
+        }
+        let body = resp
+            .json::<GhResponse>()
+            .await
+            .map_err(|e| format!("解析 GitHub 响应失败：{e}"))?;
+        let items: Vec<Item> = body.items.into_iter().take(limit).map(Item::from).collect();
+        if let Ok(mut cache) = self.cache.lock() {
+            cache.retain(|_, (at, _)| at.elapsed() < CACHE_TTL);
+            if cache.len() >= 256 {
+                cache.clear();
+            }
+            cache.insert(key, (Instant::now(), items.clone()));
+        }
+        Ok((items, false))
+    }
+}
+
 #[tauri::command]
-async fn search(
-    query: String,
-    limit: Option<usize>,
-    app: tauri::AppHandle,
-) -> SearchResponse {
+async fn search(query: String, limit: Option<usize>, app: tauri::AppHandle) -> SearchResponse {
     let state = app.state::<AppState>();
+    let request_id = state.search_generation.fetch_add(1, Ordering::Relaxed) + 1;
     let query = query.trim().to_string();
     let limit = limit.unwrap_or(10).clamp(1, 30);
 
@@ -186,6 +288,8 @@ async fn search(
         query: query.clone(),
         english: english.clone(),
         groups: analysis.groups,
+        keys: analysis.keys,
+        coverage: analysis.coverage,
         raw_cn: analysis.raw_cn,
         source: "github".into(),
         items: Vec::new(),
@@ -197,59 +301,24 @@ async fn search(
         return out;
     }
 
-    let cache_key = format!("{english} | archived:false");
-    if let Ok(cache) = state.cache.lock() {
-        if let Some((at, items)) = cache.get(&cache_key) {
-            if at.elapsed() < CACHE_TTL {
-                out.items = items.iter().take(limit).cloned().collect();
+    match state
+        .github_items(
+            &format!("{english} archived:false"),
+            limit,
+            "",
+            CACHE_TTL,
+            &state.search_generation,
+            request_id,
+        )
+        .await
+    {
+        Ok((items, cached)) => {
+            out.items = items;
+            if cached {
                 out.source = "cache".into();
-                return out;
             }
         }
-    }
-
-    let mut req = state
-        .client
-        .get(API)
-        .query(&[
-            ("q", format!("{english} archived:false")),
-            ("per_page", limit.to_string()),
-            ("order", "desc".to_string()),
-        ])
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28");
-
-    if let Some(token) = load_token() {
-        req = req.bearer_auth(token);
-    }
-
-    match req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            if !status.is_success() {
-                out.error = short_error(status.as_u16());
-                return out;
-            }
-            match resp.json::<GhResponse>().await {
-                Ok(body) => {
-                    let items: Vec<Item> = body.items.into_iter().take(limit).map(Item::from).collect();
-                    if let Ok(mut cache) = state.cache.lock() {
-                        cache.insert(cache_key, (Instant::now(), items.clone()));
-                    }
-                    out.items = items;
-                }
-                Err(e) => out.error = format!("解析 GitHub 响应失败：{e}"),
-            }
-        }
-        Err(e) => {
-            out.error = if e.is_timeout() {
-                "连接 GitHub 超时，检查网络或代理".into()
-            } else if e.is_connect() {
-                "连不上 GitHub，检查网络或代理".into()
-            } else {
-                format!("网络错误：{e}")
-            };
-        }
+        Err(e) => out.error = e,
     }
 
     out
@@ -287,6 +356,7 @@ async fn trending(
     app: tauri::AppHandle,
 ) -> SearchResponse {
     let state = app.state::<AppState>();
+    let request_id = state.trend_generation.fetch_add(1, Ordering::Relaxed) + 1;
     let period = period.unwrap_or_else(|| "day".into());
     let (days, min_stars) = match period.as_str() {
         "week" => (7, 20),
@@ -300,6 +370,8 @@ async fn trending(
         query: String::new(),
         english: String::new(),
         groups: Vec::new(),
+        keys: Vec::new(),
+        coverage: 1.0,
         raw_cn: Vec::new(),
         source: "github".into(),
         items: Vec::new(),
@@ -312,61 +384,24 @@ async fn trending(
         q.push_str(&format!(" language:{}", lang.trim()));
     }
 
-    let cache_key = format!("trend|{q}");
-    if let Ok(cache) = state.trend_cache.lock() {
-        if let Some((at, items)) = cache.get(&cache_key) {
-            if at.elapsed() < Duration::from_secs(1800) {
-                out.items = items.iter().take(limit).cloned().collect();
+    match state
+        .github_items(
+            &q,
+            limit,
+            "stars",
+            Duration::from_secs(1800),
+            &state.trend_generation,
+            request_id,
+        )
+        .await
+    {
+        Ok((items, cached)) => {
+            out.items = items;
+            if cached {
                 out.source = "cache".into();
-                return out;
             }
         }
-    }
-
-    let mut req = state
-        .client
-        .get(API)
-        .query(&[
-            ("q", q),
-            ("sort", "stars".to_string()),
-            ("order", "desc".to_string()),
-            ("per_page", limit.to_string()),
-        ])
-        .header("Accept", "application/vnd.github+json")
-        .header("X-GitHub-Api-Version", "2022-11-28");
-
-    if let Some(token) = load_token() {
-        req = req.bearer_auth(token);
-    }
-
-    match req.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            if !status.is_success() {
-                out.error = short_error(status.as_u16());
-                return out;
-            }
-            match resp.json::<GhResponse>().await {
-                Ok(body) => {
-                    let items: Vec<Item> =
-                        body.items.into_iter().take(limit).map(Item::from).collect();
-                    if let Ok(mut cache) = state.trend_cache.lock() {
-                        cache.insert(cache_key, (Instant::now(), items.clone()));
-                    }
-                    out.items = items;
-                }
-                Err(e) => out.error = format!("解析 GitHub 响应失败：{e}"),
-            }
-        }
-        Err(e) => {
-            out.error = if e.is_timeout() {
-                "连接 GitHub 超时，检查网络或代理".into()
-            } else if e.is_connect() {
-                "连不上 GitHub，检查网络或代理".into()
-            } else {
-                format!("网络错误：{e}")
-            };
-        }
+        Err(e) => out.error = e,
     }
 
     out
@@ -462,6 +497,9 @@ async fn translate(texts: Vec<String>, app: tauri::AppHandle) -> Vec<String> {
         if let Some(zh) = zh {
             out[i] = zh.clone();
             if let Ok(mut cache) = state.trans_cache.lock() {
+                if cache.len() >= 2000 {
+                    cache.clear();
+                }
                 cache.insert(texts[i].clone(), zh);
             }
         }
@@ -489,9 +527,7 @@ fn save_token(token: String) -> Result<bool, String> {
 
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
-    if !url.starts_with("https://github.com/") {
-        return Err("只允许打开 GitHub 链接".into());
-    }
+    policy::validate_github_url(&url)?;
     open::that(url).map_err(|e| format!("打不开浏览器：{e}"))
 }
 
@@ -519,7 +555,9 @@ pub fn run() {
             lex: Lexicon::load(),
             client,
             cache: Mutex::new(HashMap::new()),
-            trend_cache: Mutex::new(HashMap::new()),
+            request_gate: tokio::sync::Mutex::new(Instant::now()),
+            search_generation: AtomicU64::new(0),
+            trend_generation: AtomicU64::new(0),
             trans_cache: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![

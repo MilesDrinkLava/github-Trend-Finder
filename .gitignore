@@ -10,6 +10,10 @@ venv/
 
 # 本地数据与日志
 data/*.db
+data/*.db-*
+.env
+.env.*
+!.env.example
 crawl.log
 eval.log
 token.txt

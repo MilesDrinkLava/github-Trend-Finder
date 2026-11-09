@@ -34,14 +34,14 @@ def _short_error(e: Exception) -> str:
 
 class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=ROOT, **kwargs)
+        super().__init__(*args, directory=os.path.join(ROOT, "dist"), **kwargs)
 
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
         if path == "/api/search":
             return self._search(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query))
         if path == "/":
-            self.path = "/dist/index.html"
+            self.path = "/index.html"
         return super().do_GET()
 
     def _search(self, qs):

@@ -12,6 +12,7 @@
 """
 
 import json
+import hashlib
 import os
 import time
 from datetime import datetime, timezone
@@ -52,11 +53,15 @@ def _cache_get(con, q: str):
         return None
     try:
         age = datetime.now(timezone.utc) - datetime.fromisoformat(row["fetched_at"])
-    except ValueError:
+    except (ValueError, TypeError):
         return None
     if age.total_seconds() > CACHE_TTL_HOURS * 3600:
         return None
-    return json.loads(row["payload"])
+    try:
+        items = json.loads(row["payload"])
+        return items if isinstance(items, list) and all(isinstance(x, dict) for x in items) else None
+    except (ValueError, TypeError):
+        return None
 
 
 def _cache_put(con, q: str, items):
@@ -117,6 +122,8 @@ def search(query: str, limit: int = 10, token=None, extra: str = "",
       local  —— 断网/限速时退回本地索引（结果质量低于 GitHub）
     """
     english, groups, raw_cn = build(query)
+    limit = max(1, min(100, int(limit)))
+    credential = token if token is not None else load_token()
     out = {
         "query": query,
         "english": english,
@@ -137,7 +144,9 @@ def search(query: str, limit: int = 10, token=None, extra: str = "",
             out["error"] = "中文没命中词表，无法构造英文查询"
             return out
 
-        key = english + ((" | " + extra) if extra else "")
+        # 不同条数/凭据的响应不能互用，避免小页缓存截断大页或串用私有结果。
+        scope = hashlib.sha256((credential or "").encode()).hexdigest()
+        key = json.dumps(["v2", english, extra, limit, scope], ensure_ascii=False)
         if use_cache:
             hit = _cache_get(con, key)
             if hit is not None:
@@ -146,12 +155,15 @@ def search(query: str, limit: int = 10, token=None, extra: str = "",
                 return out
 
         try:
-            items = _api(english, limit, token or load_token(), extra)
+            items = _api(english, limit, credential, extra)
             out["items"] = items
             _cache_put(con, key, items)
         except Exception as e:
             out["error"] = f"{e}，已退回本地索引"
             out["source"] = "local"
+            # 本地索引不实现完整 GitHub 限定符；不能悄悄忽略 stars/language 等过滤。
+            supported = extra.strip() in ("", "archived:false")
+            candidates = search_mod.search(con, query, limit=100) if supported else []
             out["items"] = [
                 {
                     "full_name": r["full_name"],
@@ -163,8 +175,11 @@ def search(query: str, limit: int = 10, token=None, extra: str = "",
                     "topics": (r["topics"] or "").split(),
                     "html_url": r["html_url"] or "",
                 }
-                for _, r in search_mod.search(con, query, limit=limit)
-            ]
+                for _, r in candidates
+                if extra.strip() != "archived:false" or not r["archived"]
+            ][:limit]
+            if not supported:
+                out["error"] = f"{e}；本地索引不支持此筛选条件，未返回未筛选的结果"
         return out
     finally:
         if close:

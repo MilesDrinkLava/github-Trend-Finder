@@ -15,6 +15,9 @@ if defined TOOLS if exist "%TOOLS%\rust\rustup" (
   set "PATH=%TOOLS%\mingw\mingw64\bin;%TOOLS%\rust\cargo\bin;%TOOLS%\tauri-cli;%PATH%"
 )
 
+cd /d "%~dp0"
+python export_lexicon.py --check
+if errorlevel 1 exit /b 1
 cd /d "%~dp0src-tauri"
 
 where cargo-tauri.exe >nul 2>nul

@@ -15,6 +15,9 @@ struct LexData {
     filler: Vec<String>,
     combos: Vec<(Vec<String>, Vec<String>, Option<Vec<String>>)>,
     weak: Vec<String>,
+    ascii_aliases: HashMap<String, String>,
+    char_map: HashMap<char, char>,
+    concept_aliases: HashMap<String, String>,
 }
 
 pub struct Lexicon {
@@ -23,6 +26,9 @@ pub struct Lexicon {
     filler_keys: Vec<String>,
     combos: Vec<(HashSet<String>, HashSet<String>, Option<Vec<String>>)>,
     weak: HashSet<String>,
+    ascii_aliases: HashMap<String, String>,
+    char_map: HashMap<char, char>,
+    concept_aliases: HashMap<String, String>,
 }
 
 pub struct Analysis {
@@ -40,7 +46,7 @@ fn by_len_desc(a: &String, b: &String) -> std::cmp::Ordering {
 }
 
 fn is_ascii_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')
+    c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+' | '#')
 }
 
 fn is_cjk(c: char) -> bool {
@@ -76,10 +82,23 @@ impl Lexicon {
             filler_keys,
             combos,
             weak: d.weak.into_iter().collect(),
+            ascii_aliases: d.ascii_aliases,
+            char_map: d.char_map,
+            concept_aliases: d.concept_aliases,
         }
     }
 
     pub fn analyze(&self, query: &str) -> Analysis {
+        let normalized: String = query
+            .chars()
+            .map(|c| match c {
+                '\u{FF01}'..='\u{FF5E}' => char::from_u32(c as u32 - 0xFEE0).unwrap(),
+                '\u{3000}' => ' ',
+                _ => *self.char_map.get(&c).unwrap_or(&c),
+            })
+            .collect::<String>()
+            .to_lowercase();
+        let query = normalized.as_str();
         let mut groups: Vec<Vec<String>> = Vec::new();
         let mut keys: Vec<String> = Vec::new();
         let mut raw_cn: Vec<String> = Vec::new();
@@ -126,9 +145,12 @@ impl Lexicon {
                         break;
                     }
                 }
-                let w = query[i..j]
-                    .trim_matches(|c| c == '-' || c == '_' || c == '.')
-                    .to_lowercase();
+                let raw = query[i..j].trim_matches(|c| c == '-' || c == '_');
+                let w = self
+                    .ascii_aliases
+                    .get(raw)
+                    .cloned()
+                    .unwrap_or_else(|| raw.trim_matches('.').to_string());
                 if !w.is_empty() {
                     add(&mut groups, &mut keys, &mut seen, vec![w.clone()], w);
                 }
@@ -140,8 +162,9 @@ impl Lexicon {
             if let Some(k) = self.concept_keys.iter().find(|k| rest.starts_with(*k)) {
                 flush(&mut buf, &mut raw_cn);
                 let terms = self.concepts.get(k).cloned().unwrap_or_default();
-                matched_chars += k.chars().count();
-                add(&mut groups, &mut keys, &mut seen, terms, k.clone());
+                matched_chars += k.chars().filter(|c| is_cjk(*c)).count();
+                let key = self.concept_aliases.get(k).unwrap_or(k).clone();
+                add(&mut groups, &mut keys, &mut seen, terms, key);
                 i += k.len();
                 continue;
             }
@@ -149,7 +172,7 @@ impl Lexicon {
             // ③ 填充词是「有意丢弃」，不算未覆盖
             if let Some(k) = self.filler_keys.iter().find(|k| rest.starts_with(*k)) {
                 flush(&mut buf, &mut raw_cn);
-                matched_chars += k.chars().count();
+                matched_chars += k.chars().filter(|c| is_cjk(*c)).count();
                 i += k.len();
                 continue;
             }
@@ -157,6 +180,8 @@ impl Lexicon {
             // ④ 没认出来的汉字先攒着，只跳一个字，绝不吞后面
             if is_cjk(ch) {
                 buf.push(ch);
+            } else {
+                flush(&mut buf, &mut raw_cn);
             }
             i += ch.len_utf8();
         }
@@ -252,4 +277,42 @@ pub fn to_english(groups: &[Vec<String>]) -> String {
         .cloned()
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Deserialize)]
+    struct Case {
+        query: String,
+        english: String,
+        raw_cn: Option<Vec<String>>,
+    }
+
+    #[test]
+    fn shared_query_regressions() {
+        let lex = Lexicon::load();
+        let cases: Vec<Case> =
+            serde_json::from_str(include_str!("../../tests/queries.json")).unwrap();
+        for case in cases {
+            let a = lex.analyze(&case.query);
+            assert_eq!(to_english(&a.groups), case.english, "{}", case.query);
+            assert_eq!(a.keys.len(), a.groups.len());
+            assert!((0.0..=1.0).contains(&a.coverage), "{}", case.query);
+            if let Some(raw) = case.raw_cn {
+                assert_eq!(a.raw_cn, raw, "{}", case.query);
+            }
+        }
+    }
+
+    #[test]
+    fn all_concepts_are_recognized() {
+        let lex = Lexicon::load();
+        for (word, terms) in &lex.concepts {
+            let a = lex.analyze(word);
+            assert_eq!(&a.groups, &vec![terms.clone()], "{word}");
+            assert!(a.raw_cn.is_empty(), "{word}");
+        }
+    }
 }

@@ -932,7 +932,7 @@ $$("#themeSeg button").forEach(b => b.addEventListener("click", () => {
 const TAURI = !!window.__TAURI__;
 const LIVE = !TAURI && location.protocol.startsWith("http");
 if (TAURI) document.documentElement.classList.add("tauri");
-let selIdx = 0, timers = [], gen = 0, fetchCtl = null;
+let selIdx = 0, timers = [], gen = 0, fetchCtl = null, searchRequest = 0;
 
 function openUrl(url){
   if (!url) return;
@@ -998,7 +998,7 @@ async function translateRows(rows, g){
   const texts = rows.map(r => r.en || "");
   try {
     const zh = await window.__TAURI__.core.invoke("translate", {texts});
-    if (g !== gen || !Array.isArray(zh)) return;
+    if (g !== gen || !translateOn || !Array.isArray(zh)) return;
     const descs = $$("#results .row-desc");
     zh.forEach((t, i) => {
       if (!t || t === texts[i]) return;
@@ -1006,7 +1006,7 @@ async function translateRows(rows, g){
       if (!el) return;
       el.style.opacity = "0";
       setTimeout(() => {
-        if (g !== gen) return;
+        if (g !== gen || !translateOn) return;
         el.textContent = t;
         el.title = texts[i];
         el.style.opacity = "";
@@ -1060,14 +1060,17 @@ function setConn(ok){
 }
 
 async function liveSearch(q, animate=true){
+  const request = ++searchRequest;
+  if (fetchCtl) fetchCtl.abort();
+  gen++; // 清空输入或新请求开始后，旧译文不得写回。
   if (!q){
     $("#results").innerHTML = "";
+    $("#results").classList.remove("loading");
     setNote("");
     $("#empty").hidden = false;
     return;
   }
   $("#empty").hidden = true;
-  if (fetchCtl) fetchCtl.abort();
   fetchCtl = new AbortController();
   const list = $("#results");
   list.classList.add("loading");
@@ -1081,23 +1084,25 @@ async function liveSearch(q, animate=true){
                                {signal: fetchCtl.signal});
       data = await resp.json();
     }
-    if (q !== $("#q").value.trim()) return;
+    if (request !== searchRequest || q !== $("#q").value.trim()) return;
 
     setNote(data.error || "", !!data.error);
     setConn(!data.error);
     renderRows((data.items || []).map(rowFromItem), animate);
   } catch (e){
-    if (e.name === "AbortError") return;
+    if (request !== searchRequest || q !== $("#q").value.trim() || e.name === "AbortError") return;
     setConn(false);
     setNote("连不上服务，请重新启动应用", true);
   } finally {
-    list.classList.remove("loading");
+    if (request === searchRequest) list.classList.remove("loading");
   }
 }
 
 /* ── 热榜 ─────────────────────────────── */
 let period = "day", lang = "all";
 const hotCache = new Map();
+let hotRequest = 0;
+const HOT_CACHE_TTL = 30 * 60 * 1000;
 
 function ageText(iso){
   if (!iso) return "";
@@ -1135,7 +1140,7 @@ async function translateHot(items, key){
   const texts = items.map(r => r.d || "");
   try {
     const zh = await window.__TAURI__.core.invoke("translate", {texts});
-    if (hotCache.get(key) !== items || !Array.isArray(zh)) return;
+    if (hotCache.get(key)?.items !== items || !translateOn || !Array.isArray(zh)) return;
     if (key !== period + "|" + lang) return;
     const descs = $$("#hot .hot-desc");
     zh.forEach((t, i) => {
@@ -1149,6 +1154,7 @@ async function translateHot(items, key){
 }
 
 async function renderHot(animate=false){
+  const request = ++hotRequest;
   const list = $("#hot");
   const key = period + "|" + lang;
 
@@ -1159,8 +1165,9 @@ async function renderHot(animate=false){
     return;
   }
 
-  if (hotCache.has(key)){
-    const items = hotCache.get(key);
+  const cached = hotCache.get(key);
+  if (cached && Date.now() - cached.at < HOT_CACHE_TTL){
+    const items = cached.items;
     hotTemplate(items, animate);
     if (translateOn && items.some(r => r.en && r.d === r.en)) translateHot(items, key);
     return;
@@ -1169,7 +1176,7 @@ async function renderHot(animate=false){
   list.innerHTML = `<div style="padding:48px;text-align:center;color:var(--faint);font-size:12.5px">加载中…</div>`;
   try {
     const data = await window.__TAURI__.core.invoke("trending", {period, lang, limit: 20});
-    if (key !== period + "|" + lang) return;
+    if (request !== hotRequest || key !== period + "|" + lang) return;
     if (data.error){
       list.innerHTML = `<div style="padding:48px;text-align:center;color:var(--faint);font-size:12.5px">${esc(data.error)}</div>`;
       return;
@@ -1178,10 +1185,11 @@ async function renderHot(animate=false){
       n: it.full_name, d: it.description, en: it.description, l: it.language,
       t: it.stars, age: ageText(it.created_at), url: it.html_url
     }));
-    hotCache.set(key, items);
+    hotCache.set(key, {items, at: Date.now()});
     hotTemplate(items, animate);
     if (translateOn && items.length) translateHot(items, key);
   } catch(e){
+    if (request !== hotRequest) return;
     list.innerHTML = `<div style="padding:48px;text-align:center;color:var(--faint);font-size:12.5px">连不上 GitHub，稍后再试</div>`;
   }
 }
@@ -1211,11 +1219,28 @@ $$(".nav[data-view]").forEach(btn => {
 });
 
 let debounceT = null;
+let composing = false;
+$("#q").addEventListener("compositionstart", () => {
+  composing = true;
+  clearTimeout(debounceT);
+  searchRequest++;
+  gen++;
+  if (fetchCtl) fetchCtl.abort();
+});
+$("#q").addEventListener("compositionend", () => {
+  composing = false;
+  $("#q").dispatchEvent(new Event("input"));
+});
 $("#q").addEventListener("input", e => {
+  if (composing || e.isComposing) return;
   const v = e.target.value.trim();
 
   if (TAURI || LIVE){
     clearTimeout(debounceT);
+    searchRequest++;
+    gen++;
+    if (fetchCtl) fetchCtl.abort();
+    if (!v) { liveSearch(""); return; }
     debounceT = setTimeout(() => liveSearch(v), 320);
     return;
   }
@@ -1271,6 +1296,14 @@ trSwitch.addEventListener("click", e => {
   e.currentTarget.classList.toggle("on", translateOn);
   e.currentTarget.setAttribute("aria-checked", String(translateOn));
   localStorage.setItem("ghf-tr", translateOn ? "1" : "0");
+  if (!translateOn) {
+    gen++;
+    $$("#results .row-desc, #hot .hot-desc").forEach(el => {
+      if (el.title) el.textContent = el.title;
+      el.style.opacity = "";
+    });
+    for (const {items} of hotCache.values()) items.forEach(r => { r.d = r.en; });
+  }
   if (translateOn) liveSearch($("#q").value.trim(), false);
 });
 
@@ -1288,6 +1321,7 @@ $("#tokenSave").addEventListener("click", async () => {
   try {
     await window.__TAURI__.core.invoke("save_token", {token: v});
     $("#tokenInput").value = "";
+    hotCache.clear();
     await refreshTokenStatus();
   } catch (e) {
     setNote("token 保存失败", true);
@@ -1323,7 +1357,7 @@ $("#authorLink").addEventListener("click", e => {
   openUrl("https://github.com/MilesDrinkLava");
 });
 applyTheme(themeMode);
-renderHot(false);
+if (!TAURI) renderHot(false);
 requestAnimationFrame(movePill);
 $("#q").focus();
 

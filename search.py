@@ -14,8 +14,8 @@ import db
 import expand as expand_mod
 
 PERMISSIVE = {
-    "MIT", "Apache-2.0", "BSD-3-Clause", "BSD-2-Clause", "ISC",
-    "MPL-2.0", "Unlicense", "0BSD", "CC0-1.0",
+    "MIT", "APACHE-2.0", "BSD-3-CLAUSE", "BSD-2-CLAUSE", "ISC",
+    "UNLICENSE", "0BSD", "CC0-1.0",
 }
 
 # 这些词出现在名字/描述里，说明它是「资源集合」而不是「能用的工具」
@@ -64,7 +64,7 @@ def _has_part(tokens, part: str) -> bool:
     return any(t.startswith(part) for t in tokens)
 
 
-def group_flags(text: str, groups):
+def group_flags(text: str, groups, substring: bool = False):
     """逐组判断是否命中，返回布尔列表（顺序与 groups 一致）。"""
     tokens = _tokens(text)
     flags = []
@@ -72,7 +72,10 @@ def group_flags(text: str, groups):
         hit = False
         for term in group:
             parts = _parts(term)
-            if parts and all(_has_part(tokens, p) for p in parts):
+            if parts and all(
+                any(p in t for t in tokens) if substring else _has_part(tokens, p)
+                for p in parts
+            ):
                 hit = True
                 break
         flags.append(hit)
@@ -127,9 +130,11 @@ def _days_since(ts: str) -> int:
         return 9999
     try:
         dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-    except ValueError:
+    except (ValueError, TypeError):
         return 9999
-    return (datetime.now(timezone.utc) - dt).days
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return max(0, (datetime.now(timezone.utc) - dt).days)
 
 
 def head_bonus(row, groups) -> float:
@@ -193,19 +198,40 @@ def search(con, query: str, limit: int = 20, debug: bool = False, ratio: float =
             (match,),
         ).fetchall()
 
-    # 主索引完全没结果时，才用 trigram 兜底（中文描述、词内子串）。
-    # 注意：绝不能在这里覆盖已有结果——之前就因为「主索引 1 条 + 兜底 0 条」
-    # 把有效结果清空了。
-    if not rows and raw_cn:
-        rows = con.execute(
+    # 子串召回必须合并，而不是仅在未识别中文且主索引为空时才运行。
+    # trigram 不支持编辑距离；少于三个字符的未知中文用受限的扫描兜底。
+    tri_terms = set()
+    for group in groups:
+        for term in group:
+            parts = [p for p in _parts(term) if len(p) >= 3]
+            if parts:
+                tri_terms.add("(" + " AND ".join('"' + p + '"' for p in parts) + ")")
+    tri_terms.update('"' + s.replace('"', '""') + '"' for s in raw_cn if len(s) >= 3)
+    tri_rows = []
+    if tri_terms:
+        tri_rows = con.execute(
             """
             SELECT r.*, bm25(repos_tri, 10.0, 6.0, 3.0, 1.0) AS bm
             FROM repos_tri JOIN repos r ON r.id = repos_tri.rowid
             WHERE repos_tri MATCH ?
             ORDER BY bm LIMIT 200
             """,
-            ('"' + raw_cn[0] + '"',),
+            (" OR ".join(sorted(tri_terms)),),
         ).fetchall()
+    if not rows and not tri_rows and raw_cn:
+        terms = [s for s in raw_cn if len(s) < 3]
+        if terms:
+            tri_rows = con.execute(
+                "SELECT r.*, 0.0 AS bm FROM repos r WHERE " +
+                " OR ".join("instr(coalesce(description, '') || full_name || coalesce(topics, ''), ?) > 0" for _ in terms) +
+                " ORDER BY stars DESC LIMIT 200", terms,
+            ).fetchall()
+    tri_ids = {r["id"] for r in tri_rows}
+    existing_ids = {r["id"] for r in rows}
+    # 两个 FTS 索引的 BM25 量级不同，子串补充项用主召回的最低分。
+    if tri_rows:
+        floor = max((r["bm"] for r in rows), default=0.0)
+        rows.extend(dict(r, bm=floor) for r in tri_rows if r["id"] not in existing_ids)
 
     weights = group_weights(con, groups)
     total_w = sum(weights) or 1.0
@@ -213,7 +239,7 @@ def search(con, query: str, limit: int = 20, debug: bool = False, ratio: float =
     kept = []
     for r in rows:
         text = f"{r['full_name']} {r['description'] or ''} {r['topics'] or ''}"
-        flags = group_flags(text, groups)
+        flags = group_flags(text, groups, substring=r["id"] in tri_ids)
         if not passes(flags, weights, ratio):
             continue
         coverage = sum(w for f, w in zip(flags, weights) if f) / total_w

@@ -9,6 +9,7 @@
 
 import json
 import os
+import sys
 
 import lexicon
 
@@ -16,8 +17,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "src-tauri", "lexicon.json")
 
 
-def main():
-    data = {
+def build_data():
+    """稳定、可验证的导出结构，Python 是词库唯一来源。"""
+    return {
         "concepts": {k: list(v) for k, v in lexicon.CONCEPTS.items()},
         "filler": sorted(lexicon.FILLER),
         "combos": [
@@ -25,10 +27,28 @@ def main():
             for triggers, consume, repl in lexicon.COMBOS
         ],
         "weak": sorted(lexicon.WEAK_CONCEPTS),
+        "ascii_aliases": lexicon.ASCII_ALIASES,
+        "char_map": lexicon.CHAR_MAP,
+        "concept_aliases": lexicon.CONCEPT_ALIASES,
     }
+
+
+def main():
+    data = build_data()
+    content = json.dumps(data, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    if "--check" in sys.argv:
+        try:
+            with open(OUT, encoding="utf-8") as f:
+                current = f.read()
+        except FileNotFoundError:
+            current = ""
+        if current != content:
+            raise SystemExit("词库导出已过期，请运行 python export_lexicon.py")
+        print("词库导出一致")
+        return
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    with open(OUT, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=1)
+    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
+        f.write(content)
     print(f"已写入 {OUT}")
     print(f"概念 {len(data['concepts'])} · 填充词 {len(data['filler'])} · "
           f"组合 {len(data['combos'])} · 弱概念 {len(data['weak'])}")
