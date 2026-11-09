@@ -546,7 +546,7 @@ pub fn run() {
     migrate_legacy_token();
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
-        .user_agent("gh-finder/1.0")
+        .user_agent(concat!("gh-finder/", env!("CARGO_PKG_VERSION")))
         .build()
         .unwrap_or_default();
 

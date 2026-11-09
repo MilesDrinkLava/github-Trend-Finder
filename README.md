@@ -1,5 +1,7 @@
 # GitHub Trend & Finder
 
+当前版本：**V1.1**（内部版本 `1.1.0`）；上一版为 **V1.0**（`1.0.0`）。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+
 > 用中文搜 GitHub 开源项目。只补中文到英文的术语映射，搜索与排序全部交回 GitHub。
 
 ![搜索界面](docs/screenshot-search.png)
