@@ -1,0 +1,4 @@
+interface:
+  display_name: "开发前找轮子"
+  short_description: "审查当前需求与项目，查找 GitHub 相似实现并比较可复用性与改造成本"
+  default_prompt: "使用 $reuse-before-build，先审查当前项目和目标，再查找可直接使用、二次开发或参考实现的 GitHub 项目，说明差异与证据。"
