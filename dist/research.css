@@ -69,4 +69,12 @@
 .settings-input-row .input{flex:1;min-width:190px;width:auto}
 .setting-feedback{font-size:12px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}
 .setting-feedback:empty{display:none}
+.review-more-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 28px 10px;padding:11px 13px;background:var(--surface-2);border-radius:8px;flex-shrink:0}
+#reviewRemaining{font-size:12px;color:var(--text-dim)}
+#reviewMoreBudget{font-size:10.5px;color:var(--muted);margin-top:4px;line-height:1.5}
+#reviewMore{white-space:nowrap}
+.review-project{font-size:11px;margin-left:auto}
+.review-project+.open-repo{margin-left:0}
+.quiet-btn:disabled,.btn:disabled{opacity:.5;cursor:default}
+@media(max-width:800px){.review-more-bar{margin-left:18px;margin-right:18px;gap:9px}}
 @media(max-width:800px){.search-actions,.research-panel,.result-tabs{margin-left:18px;margin-right:18px}.research-card.row{padding:14px 12px}.result-tabs{gap:12px}.settings-input-row .input{min-width:150px}}

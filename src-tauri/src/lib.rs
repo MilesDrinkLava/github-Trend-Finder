@@ -5,6 +5,8 @@ mod policy;
 mod preferences;
 mod prefilter;
 mod research;
+mod review_commands;
+mod review_session;
 mod settings_commands;
 use policy::retry_delay;
 
@@ -31,6 +33,7 @@ pub struct AppState {
     research_generation: Arc<AtomicU64>,
     research_cache: research::PageCache,
     active_research: Mutex<String>,
+    review_sessions: Arc<Mutex<review_session::Sessions>>,
     research_results: Mutex<HashMap<String, (Instant, research::ResearchResult)>>,
     search_generation: AtomicU64,
     trend_generation: AtomicU64,
@@ -370,7 +373,16 @@ async fn smart_search(
         let mut active = state.active_research.lock().map_err(|_| "会话锁异常")?;
         let id = state.research_generation.fetch_add(1, Ordering::Relaxed) + 1;
         *active = session.clone();
+        state
+            .review_sessions
+            .lock()
+            .map_err(|_| "会话锁异常")?
+            .start_search(&session, id);
         id
+    };
+    let operation = review_session::Operation {
+        sessions: state.review_sessions.clone(),
+        id,
     };
     let query = query.trim();
     if query.is_empty() || query.chars().count() > 500 {
@@ -419,11 +431,16 @@ async fn smart_search(
         result.stats.prompt_tokens = 0;
         result.stats.completion_tokens = 0;
         result.stats.model_input_bytes = 0;
+        result.stats.total_model_calls = 0;
+        result.stats.total_prompt_tokens = 0;
+        result.stats.total_completion_tokens = 0;
+        result.stats.total_model_input_bytes = 0;
         std::fs::write(
             sample_directory.join("latest.json"),
             serde_json::to_vec_pretty(&result).map_err(|_| "样本编码失败")?,
         )
         .map_err(|_| "无法保存缓存样本")?;
+        operation.finish(Some(result.clone()));
         return Ok(result);
     }
     let engine = research::Engine {
@@ -437,6 +454,8 @@ async fn smart_search(
         review_limit,
         budget: Arc::new(Mutex::new(research::ModelBudget::for_reviews(review_limit))),
         checkpoint: Some(sample_directory),
+        snapshot: Some(Arc::new(Mutex::new(None))),
+        record_prefix: String::new(),
         cancel: research::Cancellation {
             generation: state.research_generation.clone(),
             id,
@@ -445,9 +464,11 @@ async fn smart_search(
     let run = engine.run(query, target, &session, |progress| {
         let _ = app.emit("research-progress", progress);
     });
-    let result = tokio::time::timeout(Duration::from_secs(900), run)
+    let outcome = tokio::time::timeout(Duration::from_secs(900), run)
         .await
-        .map_err(|_| "已到 15 分钟会话上限，当前已显示的样本仍可查看".to_string())??;
+        .unwrap_or_else(|_| Err("已到 15 分钟会话上限，已完成的样本仍可查看".into()));
+    review_commands::retain(&engine, &operation, &outcome);
+    let result = outcome?;
     if result.warnings.is_empty() && result.stats.assessed_count == result.stats.shortlisted_count {
         if let Ok(mut cache) = state.research_results.lock() {
             if cache.len() >= 8 {
@@ -769,6 +790,7 @@ pub fn run() {
             research_generation: Arc::new(AtomicU64::new(0)),
             research_cache: Arc::new(Mutex::new(HashMap::new())),
             active_research: Mutex::new(String::new()),
+            review_sessions: Arc::new(Mutex::new(review_session::Sessions::default())),
             research_results: Mutex::new(HashMap::new()),
             search_generation: AtomicU64::new(0),
             trend_generation: AtomicU64::new(0),
@@ -778,6 +800,8 @@ pub fn run() {
             search,
             smart_search,
             cancel_smart_search,
+            review_commands::continue_research,
+            review_commands::research_session,
             model_settings,
             save_model_settings,
             test_model_connection,

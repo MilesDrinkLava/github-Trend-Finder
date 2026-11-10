@@ -667,6 +667,10 @@
       <div class="research-panel" id="researchPanel"><div id="researchStatus" role="status">先从 GitHub 查找，再让 AI 精读少量候选。</div><button class="quiet-btn" id="researchSettingsLink" hidden>检查设置</button></div>
       <div class="result-tabs" id="resultTabs" hidden><button class="on" id="showRecommendations">推荐项目</button><button id="showAllCandidates">全部 GitHub 结果</button><button class="quiet-btn samples-link" data-open-samples>打开样本文件夹</button></div>
       <p class="research-warning" id="researchWarnings" hidden></p>
+      <div class="review-more-bar" id="reviewMoreBar" hidden>
+        <div><p id="reviewRemaining"></p><p id="reviewMoreBudget"></p></div>
+        <button class="btn" id="reviewMore">继续分析 20 个</button>
+      </div>
 
       <div class="filebar" id="filebar" hidden>
         静态预览，数据是写死的。真实搜索请运行 <code>python app/server.py</code>
@@ -801,7 +805,7 @@
               </svg>
             </div>
             <div>
-              <div class="about-name">GitHub Trend &amp; Finder<span>V2.0 Alpha 2</span></div>
+              <div class="about-name">GitHub Trend &amp; Finder<span>V2.0 Alpha 3</span></div>
               <div class="about-sub">用中文搜 GitHub 开源项目</div>
             </div>
           </div>
@@ -816,7 +820,7 @@
 
       <footer>
         <div class="keys"><span>GitHub Trend &amp; Finder · Tauri 2</span></div>
-        <div class="status">V2.0 Alpha 2</div>
+        <div class="status">V2.0 Alpha 3</div>
       </footer>
     </section>
   </main>
@@ -1303,7 +1307,7 @@ trSwitch.addEventListener("click", e => {
   if (translateOn && !window.researchUI?.enabled()) liveSearch($("#q").value.trim(), false);
 });
 
-window.addEventListener("app-settings-updated", () => { hotCache.clear(); window.researchUI?.invalidate(); });
+window.addEventListener("app-settings-updated", () => { hotCache.clear(); window.researchUI?.settingsChanged(); });
 
 document.addEventListener("keydown", e => {
   // 中文输入法用 Enter 上屏时不要触发打开；229 是部分输入法的兼容键码。

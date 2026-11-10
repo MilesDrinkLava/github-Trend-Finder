@@ -150,6 +150,10 @@ pub struct Stats {
     pub model_input_bytes: usize,
     pub model_output_limit: usize,
     pub model_call_limit: usize,
+    pub total_model_calls: usize,
+    pub total_prompt_tokens: u64,
+    pub total_completion_tokens: u64,
+    pub total_model_input_bytes: usize,
 }
 
 #[derive(Clone, Serialize)]
@@ -208,6 +212,10 @@ pub struct ModelBudget {
     pub max_calls: usize,
     pub max_input_bytes: usize,
     pub max_output_tokens: usize,
+    prior_calls: usize,
+    prior_prompt: u64,
+    prior_completion: u64,
+    prior_bytes: usize,
 }
 impl ModelBudget {
     pub fn for_reviews(n: usize) -> Self {
@@ -215,6 +223,18 @@ impl ModelBudget {
             max_calls: 1 + n.div_ceil(BATCH),
             max_input_bytes: 20_000 + n * 1500,
             max_output_tokens: 600 + n.div_ceil(BATCH) * 1000,
+            ..Self::default()
+        }
+    }
+    pub fn for_additional(n: usize, previous: &Stats) -> Self {
+        Self {
+            max_calls: n.div_ceil(BATCH),
+            max_input_bytes: 20_000 + n * 1500,
+            max_output_tokens: n.div_ceil(BATCH) * 1000,
+            prior_calls: previous.total_model_calls,
+            prior_prompt: previous.total_prompt_tokens,
+            prior_completion: previous.total_completion_tokens,
+            prior_bytes: previous.total_model_input_bytes,
             ..Self::default()
         }
     }
@@ -238,6 +258,10 @@ impl ModelBudget {
         stats.model_output_limit = self.max_output_tokens;
         stats.prompt_tokens = self.prompt_tokens;
         stats.completion_tokens = self.completion_tokens;
+        stats.total_model_calls = self.prior_calls + self.calls;
+        stats.total_prompt_tokens = self.prior_prompt + self.prompt_tokens;
+        stats.total_completion_tokens = self.prior_completion + self.completion_tokens;
+        stats.total_model_input_bytes = self.prior_bytes + self.input_bytes;
     }
 }
 
@@ -253,6 +277,8 @@ pub struct Engine {
     pub review_limit: usize,
     pub budget: Arc<Mutex<ModelBudget>>,
     pub checkpoint: Option<std::path::PathBuf>,
+    pub snapshot: Option<Arc<Mutex<Option<ResearchResult>>>>,
+    pub record_prefix: String,
 }
 
 pub fn has_chinese(text: &str) -> bool {
@@ -421,6 +447,19 @@ impl Engine {
         stats: &Stats,
         warnings: &[String],
     ) -> Result<(), String> {
+        if let Some(snapshot) = &self.snapshot {
+            *snapshot.lock().map_err(|_| "会话快照锁异常")? = Some(ResearchResult {
+                query: query.into(),
+                session: session.into(),
+                plan: plan.clone(),
+                queries: queries.to_vec(),
+                items: pool.to_vec(),
+                stats: stats.clone(),
+                warnings: warnings.to_vec(),
+                source: "github_prefilter+deepseek".into(),
+                sample_directory: self.checkpoint.as_ref().map(|p| p.to_string_lossy().into()),
+            });
+        }
         if let Some(dir) = &self.checkpoint {
             let value = json!({"schema_version":2,"stage":stage,"query":query,"session":session,
                 "plan":plan,"queries":queries,"items":pool,"stats":stats,"warnings":warnings,"sample_directory":dir.to_string_lossy()});
@@ -451,7 +490,10 @@ impl Engine {
         };
         if let Some(dir) = &self.checkpoint {
             std::fs::write(
-                dir.join(format!("model-request-{call_number:02}.json")),
+                dir.join(format!(
+                    "{}model-request-{call_number:02}.json",
+                    self.record_prefix
+                )),
                 serde_json::to_vec_pretty(&request).map_err(|_| "请求记录编码失败")?,
             )
             .map_err(|_| "请求未发送：无法保存样本记录")?;
@@ -489,7 +531,10 @@ impl Engine {
             }
             if let Some(dir) = &self.checkpoint {
                 std::fs::write(
-                    dir.join(format!("model-response-{call_number:02}.json")),
+                    dir.join(format!(
+                        "{}model-response-{call_number:02}.json",
+                        self.record_prefix
+                    )),
                     serde_json::to_vec_pretty(&body).map_err(|_| "响应记录编码失败")?,
                 )
                 .map_err(|_| "无法保存模型响应记录")?;
@@ -836,91 +881,10 @@ impl Engine {
             &stats,
             pool.clone(),
         );
-        for &at in &selected {
-            self.cancel.check()?;
-            emit(
-                "reading",
-                format!("读取项目说明：{}", pool[at].repo.full_name),
-                &stats,
-                vec![],
-            );
-            if let Ok((text, url, sha)) = self.readme(&pool[at]).await {
-                pool[at].readme = text;
-                pool[at].readme_url = Some(url);
-                pool[at].readme_sha = Some(sha);
-                stats.readme_count += 1;
-            }
-        }
-        for chunk in selected.chunks(BATCH) {
-            self.cancel.check()?;
-            let batch: Vec<Candidate> = chunk.iter().map(|&at| pool[at].clone()).collect();
-            match self.judge(&plan, &batch).await {
-                Ok(rows) => {
-                    for row in rows {
-                        if let Some(&at) = indexes.get(&row.id) {
-                            pool[at].assessment = Some(row);
-                        }
-                    }
-                }
-                Err(e) => {
-                    self.cancel.check()?;
-                    warnings.push(format!("AI精读已停止：{e}"));
-                    break;
-                }
-            }
-            self.usage(&mut stats);
-            stats.assessed_count = pool.iter().filter(|c| c.assessment.is_some()).count();
-            if let Err(e) = self.save_checkpoint(
-                "ai_review",
-                query,
-                session,
-                &plan,
-                &queries,
-                &pool,
-                &stats,
-                &warnings,
-            ) {
-                warnings.push(e);
-            }
-            emit(
-                "judging",
-                format!(
-                    "已精读 {} / {} 个推荐候选",
-                    stats.assessed_count, stats.shortlisted_count
-                ),
-                &stats,
-                chunk.iter().map(|&at| pool[at].clone()).collect(),
-            );
-        }
-        self.usage(&mut stats);
-        stats.assessed_count = pool.iter().filter(|c| c.assessment.is_some()).count();
-        if stats.assessed_count < selected.len() {
-            warnings.push(format!(
-                "{} 个精读候选未完成 AI 判断，仍可查看 GitHub 初筛结果",
-                selected.len() - stats.assessed_count
-            ));
-        }
         if stats.search_requests >= request_budget {
             warnings.push("已达到本轮 GitHub 检索上限".into());
         }
-        warnings.sort();
-        warnings.dedup();
-        if let Err(e) = self.save_checkpoint(
-            "done", query, session, &plan, &queries, &pool, &stats, &warnings,
-        ) {
-            warnings.push(e);
-        }
-        emit(
-            "done",
-            format!(
-                "完成：从 {} 个项目中精读 {} 个",
-                pool.len(),
-                stats.assessed_count
-            ),
-            &stats,
-            pool.clone(),
-        );
-        Ok(ResearchResult {
+        let mut result = ResearchResult {
             query: query.into(),
             session: session.into(),
             plan,
@@ -930,6 +894,208 @@ impl Engine {
             warnings,
             source: "github_prefilter+deepseek".into(),
             sample_directory: self.checkpoint.as_ref().map(|p| p.to_string_lossy().into()),
-        })
+        };
+        self.review_selected(&mut result, &selected, &notify)
+            .await?;
+        Ok(result)
     }
+
+    pub fn checkpoint_result(&self, stage: &str, result: &ResearchResult) -> Result<(), String> {
+        self.save_checkpoint(
+            stage,
+            &result.query,
+            &result.session,
+            &result.plan,
+            &result.queries,
+            &result.items,
+            &result.stats,
+            &result.warnings,
+        )
+    }
+
+    /// Reuse the owned GitHub pool and plan. No search or planning requests are sent here.
+    pub async fn review_more(
+        &self,
+        mut result: ResearchResult,
+        candidate_id: Option<u64>,
+        notify: impl Fn(Progress) + Sync,
+    ) -> Result<ResearchResult, String> {
+        self.cancel.check()?;
+        if result.stats.shortlisted_count == 0 {
+            // A search may have been stopped during GitHub sampling, before initial ranking.
+            crate::prefilter::choose(&mut result.items, 0, &result.query);
+        }
+        let selected = additional_candidates(&result, self.review_limit, candidate_id)?;
+        if selected.is_empty() {
+            return Ok(result);
+        }
+        for &at in &selected {
+            result.items[at].selected_for_ai = true;
+        }
+        result.stats.shortlisted_count = result.items.iter().filter(|c| c.selected_for_ai).count();
+        self.usage(&mut result.stats);
+        result.source = "additional_review".into();
+        self.checkpoint_result("additional_start", &result)?;
+        notify(Progress {
+            session: result.session.clone(),
+            stage: "additional_start".into(),
+            message: format!("将继续分析 {} 个未完成项目", selected.len()),
+            stats: result.stats.clone(),
+            items: selected
+                .iter()
+                .map(|&at| result.items[at].clone())
+                .collect(),
+        });
+        self.review_selected(&mut result, &selected, &notify)
+            .await?;
+        Ok(result)
+    }
+
+    async fn review_selected(
+        &self,
+        result: &mut ResearchResult,
+        selected: &[usize],
+        notify: &(impl Fn(Progress) + Sync),
+    ) -> Result<(), String> {
+        let initial_count = result
+            .items
+            .iter()
+            .filter(|c| c.assessment.is_some())
+            .count();
+        // Replace only stale review warnings; retrieval warnings remain valid for the same pool.
+        result.warnings.retain(|w| {
+            !w.starts_with("AI精读已停止：")
+                && !w.starts_with("本次分析中断：")
+                && !w.contains("个精读候选未完成 AI 判断")
+        });
+        for chunk in selected.chunks(BATCH) {
+            self.cancel.check()?;
+            for &at in chunk {
+                if result.items[at].readme.is_empty() {
+                    self.cancel.check()?;
+                    notify(Progress {
+                        session: result.session.clone(),
+                        stage: "reading".into(),
+                        message: format!("读取项目说明：{}", result.items[at].repo.full_name),
+                        stats: result.stats.clone(),
+                        items: vec![],
+                    });
+                    if let Ok((text, url, sha)) = self.readme(&result.items[at]).await {
+                        result.items[at].readme = text;
+                        result.items[at].readme_url = Some(url);
+                        result.items[at].readme_sha = Some(sha);
+                        result.stats.readme_count += 1;
+                    }
+                }
+            }
+            self.cancel.check()?;
+            self.checkpoint_result("before_ai_review", result)?;
+            let batch: Vec<Candidate> = chunk.iter().map(|&at| result.items[at].clone()).collect();
+            let response = self.judge(&result.plan, &batch).await;
+            self.usage(&mut result.stats);
+            match response {
+                Ok(rows) => {
+                    for row in rows {
+                        if let Some(&at) =
+                            chunk.iter().find(|&&at| result.items[at].repo.id == row.id)
+                        {
+                            result.items[at].assessment = Some(row);
+                        }
+                    }
+                }
+                Err(e) => {
+                    result.warnings.push(format!("AI精读已停止：{e}"));
+                    self.checkpoint_result("ai_stopped", result)?;
+                    self.cancel.check()?;
+                    break;
+                }
+            }
+            result.stats.assessed_count = result
+                .items
+                .iter()
+                .filter(|c| c.assessment.is_some())
+                .count();
+            self.checkpoint_result("ai_review", result)?;
+            notify(Progress {
+                session: result.session.clone(),
+                stage: "judging".into(),
+                message: format!(
+                    "本次完成 {} / {} 个；累计已分析 {} 个",
+                    result.stats.assessed_count - initial_count,
+                    selected.len(),
+                    result.stats.assessed_count
+                ),
+                stats: result.stats.clone(),
+                items: chunk.iter().map(|&at| result.items[at].clone()).collect(),
+            });
+        }
+        self.usage(&mut result.stats);
+        result.stats.assessed_count = result
+            .items
+            .iter()
+            .filter(|c| c.assessment.is_some())
+            .count();
+        let unfinished = result
+            .items
+            .iter()
+            .filter(|c| c.selected_for_ai && c.assessment.is_none())
+            .count();
+        if unfinished > 0 {
+            result.warnings.push(format!(
+                "{unfinished} 个精读候选未完成 AI 判断，仍可查看 GitHub 初筛结果"
+            ));
+        }
+        result.warnings.sort();
+        result.warnings.dedup();
+        self.checkpoint_result("done", result)?;
+        notify(Progress {
+            session: result.session.clone(),
+            stage: "done".into(),
+            message: format!(
+                "本次完成 {} 个；累计已分析 {} 个",
+                result.stats.assessed_count - initial_count,
+                result.stats.assessed_count
+            ),
+            stats: result.stats.clone(),
+            items: result.items.clone(),
+        });
+        Ok(())
+    }
+}
+
+pub fn additional_candidates(
+    result: &ResearchResult,
+    limit: usize,
+    candidate_id: Option<u64>,
+) -> Result<Vec<usize>, String> {
+    if let Some(id) = candidate_id {
+        let at = result
+            .items
+            .iter()
+            .position(|c| c.repo.id == id)
+            .ok_or("该项目不在当前 GitHub 候选中")?;
+        if result.items[at].assessment.is_some() {
+            return Err("该项目已完成分析，无需重复调用".into());
+        }
+        return Ok(vec![at]);
+    }
+    let mut remaining: Vec<usize> = result
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, c)| c.assessment.is_none())
+        .map(|(at, _)| at)
+        .collect();
+    remaining.sort_by(|&a, &b| {
+        result.items[b]
+            .prefilter_score
+            .total_cmp(&result.items[a].prefilter_score)
+            .then(
+                result.items[a]
+                    .original_rank
+                    .cmp(&result.items[b].original_rank),
+            )
+    });
+    remaining.truncate(limit.clamp(1, 30));
+    Ok(remaining)
 }

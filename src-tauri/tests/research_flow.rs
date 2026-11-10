@@ -4,6 +4,8 @@ mod policy;
 mod prefilter;
 #[path = "../src/research.rs"]
 mod research;
+#[path = "../src/review_session.rs"]
+mod review_session;
 use research::*;
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -252,6 +254,8 @@ fn engine(base: &str) -> Engine {
         review_limit: 20,
         budget: Arc::new(Mutex::new(ModelBudget::for_reviews(20))),
         checkpoint: None,
+        snapshot: None,
+        record_prefix: String::new(),
     }
 }
 #[test]
@@ -393,4 +397,326 @@ fn cancellation_interrupts_an_inflight_model_request() {
     );
     assert!(start.elapsed() < Duration::from_secs(1));
     cancel.join().unwrap();
+}
+
+fn prior_pool() -> ResearchResult {
+    let mut items = Vec::new();
+    let mut index = HashMap::new();
+    for id in 1..=600 {
+        merge_candidates(
+            &mut items,
+            &mut index,
+            vec![repo(id, Some("离线批量重命名文件"), 0)],
+            "批量改名",
+            600,
+        );
+        let c = items.last_mut().unwrap();
+        c.prefilter_score = 1.0 / id as f64;
+        if id <= 20 {
+            c.selected_for_ai = true;
+            c.assessment = Some(Assessment {
+                id,
+                verdict: Verdict::Match,
+                relevance: 90,
+                category: "app".into(),
+                reason: "已完成的判断".into(),
+                matched: vec![],
+                gaps: vec![],
+                evidence: vec![],
+            });
+        }
+    }
+    ResearchResult {
+        query: "批量改名".into(),
+        session: "current-search".into(),
+        plan: plan(),
+        queries: vec!["批量改名".into()],
+        items,
+        stats: Stats {
+            unique_count: 600,
+            assessed_count: 20,
+            shortlisted_count: 20,
+            model_calls: 5,
+            prompt_tokens: 500,
+            completion_tokens: 200,
+            total_model_calls: 5,
+            total_prompt_tokens: 500,
+            total_completion_tokens: 200,
+            ..Stats::default()
+        },
+        warnings: vec![],
+        source: "test".into(),
+        sample_directory: None,
+    }
+}
+fn continuation(base: &str, previous: &ResearchResult, n: usize) -> Engine {
+    let mut e = engine(base);
+    e.review_limit = n;
+    e.budget = Arc::new(Mutex::new(ModelBudget::for_additional(n, &previous.stats)));
+    e.snapshot = Some(Arc::new(Mutex::new(Some(previous.clone()))));
+    e.record_prefix = "additional-test-".into();
+    e
+}
+fn model_ids(server: &Server) -> Vec<u64> {
+    server
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|r| r["path"] == "/chat/completions")
+        .flat_map(|r| {
+            let user: Value =
+                serde_json::from_str(r["body"]["messages"][1]["content"].as_str().unwrap())
+                    .unwrap();
+            assert!(
+                user.get("request").is_none(),
+                "continuation must not regenerate queries"
+            );
+            user["candidates"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|c| c["id"].as_u64().unwrap())
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[test]
+fn continuation_uses_next_twenty_without_new_search_or_rejudging_completed_projects() {
+    let server = server(false);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let prior = prior_pool();
+    let e = continuation(&server.base, &prior, 20);
+    let first = rt.block_on(e.review_more(prior, None, |_| {})).unwrap();
+    assert_eq!(first.items.len(), 600);
+    assert_eq!(first.stats.assessed_count, 40);
+    assert_eq!(first.stats.model_calls, 4);
+    assert_eq!(first.stats.model_call_limit, 4);
+    assert_eq!(first.stats.model_output_limit, 4000);
+    assert_eq!(first.stats.total_model_calls, 9);
+    assert_eq!(first.stats.total_prompt_tokens, 700);
+    assert_eq!(first.stats.total_completion_tokens, 320);
+    assert_eq!(
+        first.items[0].assessment.as_ref().unwrap().reason,
+        "已完成的判断"
+    );
+    let next = continuation(&server.base, &first, 20);
+    let final_result = rt.block_on(next.review_more(first, None, |_| {})).unwrap();
+    assert_eq!(final_result.stats.assessed_count, 60);
+    assert_eq!(final_result.stats.total_model_calls, 13);
+    assert_eq!(model_ids(&server), (21..=60).collect::<Vec<_>>());
+    assert!(!server
+        .seen
+        .lock()
+        .unwrap()
+        .iter()
+        .any(|r| r["path"].as_str().unwrap().starts_with("/search/")));
+}
+
+#[test]
+fn explicit_tail_project_is_reviewed_alone_and_unknown_or_completed_ids_make_no_calls() {
+    let server = server(false);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let prior = prior_pool();
+    let e = continuation(&server.base, &prior, 1);
+    let result = rt
+        .block_on(e.review_more(prior, Some(600), |_| {}))
+        .unwrap();
+    assert!(result.items[599].assessment.is_some());
+    assert_eq!(result.stats.assessed_count, 21);
+    assert_eq!(result.stats.model_calls, 1);
+    assert_eq!(result.stats.model_output_limit, 1000);
+    assert_eq!(model_ids(&server), vec![600]);
+    let before = server.seen.lock().unwrap().len();
+    for id in [600, 9000] {
+        let e = continuation(&server.base, &result, 1);
+        assert!(rt
+            .block_on(e.review_more(result.clone(), Some(id), |_| {}))
+            .is_err());
+    }
+    assert_eq!(server.seen.lock().unwrap().len(), before);
+    assert_eq!(
+        additional_candidates(&result, 20, None).unwrap(),
+        (20..40).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn additional_budget_has_no_planning_allowance_and_keeps_prior_usage() {
+    let prior = prior_pool();
+    let mut budget = ModelBudget::for_additional(1, &prior.stats);
+    budget.reserve(&json!({"candidate":600}), 1000).unwrap();
+    assert!(budget.reserve(&json!({}), 1).is_err());
+    let mut stats = Stats::default();
+    budget.sync(&mut stats);
+    assert_eq!(stats.model_calls, 1);
+    assert_eq!(stats.total_model_calls, 6);
+    assert_eq!(stats.total_prompt_tokens, 500);
+}
+
+#[test]
+fn additional_rounds_save_the_full_pool_without_overwriting_previous_request_logs() {
+    let server = server(false);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let dir = std::env::temp_dir().join(format!(
+        "gh-finder-additional-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(dir.clone());
+    std::fs::write(
+        dir.join("model-request-01.json"),
+        "initial request sentinel",
+    )
+    .unwrap();
+    let mut current = prior_pool();
+    current.sample_directory = Some(dir.to_string_lossy().into());
+    current.warnings.push("本次分析中断：搜索已取消".into());
+    for (id, prefix) in [(600, "additional-first-"), (599, "additional-second-")] {
+        let mut e = continuation(&server.base, &current, 1);
+        e.checkpoint = Some(dir.clone());
+        e.record_prefix = prefix.into();
+        current = rt
+            .block_on(e.review_more(current, Some(id), |_| {}))
+            .unwrap();
+        assert!(dir.join(format!("{prefix}model-request-01.json")).is_file());
+        assert!(dir
+            .join(format!("{prefix}model-response-01.json"))
+            .is_file());
+    }
+    assert_eq!(
+        std::fs::read_to_string(dir.join("model-request-01.json")).unwrap(),
+        "initial request sentinel"
+    );
+    let saved: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("latest.json")).unwrap()).unwrap();
+    assert_eq!(saved["items"].as_array().unwrap().len(), 600);
+    assert_eq!(saved["stats"]["assessed_count"], 22);
+    assert_eq!(saved["stats"]["total_model_calls"], 7);
+    assert!(saved["warnings"].as_array().unwrap().is_empty());
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap();
+        assert!(!text.contains("test-deepseek") && !text.contains("test-github"));
+    }
+}
+
+#[test]
+fn session_reservation_blocks_duplicate_and_stale_operations() {
+    let state = Arc::new(Mutex::new(review_session::Sessions::default()));
+    state.lock().unwrap().start_search("current-search", 1);
+    let operation = review_session::Operation {
+        sessions: state.clone(),
+        id: 1,
+    };
+    operation.finish(Some(prior_pool()));
+    state.lock().unwrap().reserve("current-search", 2).unwrap();
+    assert!(state.lock().unwrap().reserve("current-search", 3).is_err());
+    drop(operation); // old completion must not unlock the newer reservation
+    assert!(state.lock().unwrap().ready("current-search").is_err());
+    state.lock().unwrap().finish(2, None);
+    assert_eq!(
+        state
+            .lock()
+            .unwrap()
+            .ready("current-search")
+            .unwrap()
+            .items
+            .len(),
+        600
+    );
+    state.lock().unwrap().start_search("new-search", 3);
+    state.lock().unwrap().finish(2, Some(prior_pool()));
+    assert!(state.lock().unwrap().ready("current-search").is_err());
+    assert!(state.lock().unwrap().ready("new-search").is_err());
+}
+
+#[test]
+fn continuation_ranks_a_pool_stopped_before_initial_prefilter() {
+    let server = server(false);
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let mut prior = prior_pool();
+    prior.stats.shortlisted_count = 0;
+    prior.stats.assessed_count = 0;
+    for c in &mut prior.items {
+        c.assessment = None;
+        c.selected_for_ai = false;
+        c.prefilter_score = 0.0;
+        c.route_ranks.insert(
+            "batch rename [name,description]".into(),
+            if c.repo.id == 600 {
+                1
+            } else {
+                c.repo.id as usize + 1
+            },
+        );
+    }
+    let e = continuation(&server.base, &prior, 1);
+    let result = rt.block_on(e.review_more(prior, None, |_| {})).unwrap();
+    assert_eq!(model_ids(&server), vec![600]);
+    assert_eq!(result.stats.assessed_count, 1);
+    assert!(!result.items[599].prefilter_reasons.is_empty());
+}
+
+#[test]
+fn stopping_additional_review_keeps_the_completed_batch_for_resume() {
+    let server = server_with_delay(false, Duration::from_millis(250));
+    let prior = prior_pool();
+    let e = continuation(&server.base, &prior, 20);
+    let generation = e.cancel.generation.clone();
+    let seen = server.seen.clone();
+    let cancel = std::thread::spawn(move || {
+        let until = Instant::now() + Duration::from_secs(4);
+        while seen
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|r| r["path"] == "/chat/completions")
+            .count()
+            < 2
+        {
+            assert!(Instant::now() < until, "second batch was never sent");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        generation.store(2, Ordering::Relaxed);
+    });
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    assert!(rt.block_on(e.review_more(prior, None, |_| {})).is_err());
+    cancel.join().unwrap();
+    let snapshot = e
+        .snapshot
+        .as_ref()
+        .unwrap()
+        .lock()
+        .unwrap()
+        .clone()
+        .unwrap();
+    assert_eq!(snapshot.stats.assessed_count, 25);
+    assert_eq!(snapshot.stats.total_model_calls, 7);
+    assert_eq!(additional_candidates(&snapshot, 20, None).unwrap()[0], 25);
+    assert!(snapshot.items[24].assessment.is_some());
 }

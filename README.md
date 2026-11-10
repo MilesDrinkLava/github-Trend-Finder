@@ -1,6 +1,6 @@
 # GitHub Trend & Finder
 
-当前开发版本：**V2.0 Alpha 2**（`2.0.0-alpha.2`，本地 `dev/v2.0` 分支，尚未公开发布）。稳定版 **V1.1** 与原版 **V1.0** 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前开发版本：**V2.0 Alpha 3**（`2.0.0-alpha.3`，本地 `dev/v2.0` 分支，尚未公开发布）。稳定版 **V1.1** 与原版 **V1.0** 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 V2 试用与边界：[中英文采样 + DeepSeek 筛选](docs/v2-alpha.md)。Skills 暂停。
 
@@ -28,7 +28,8 @@ V2 保留原文查询，并用 LLM 扩展中文短词、英文术语及相关表
 ## 功能
 
 - **智能采样**：保留原文，最多扩展 3 条中文与 3 条英文查询，轮流翻页、按仓库 ID 去重；上限 200 / 600 / 1200 / 2000。
-- **DeepSeek 筛选**：默认只精读 20 个 GitHub 初筛候选（可选 10 / 20 / 30）；最多 5 次模型调用、合计 4600 输出 token，不以 star 代替需求匹配。
+- **DeepSeek 筛选**：默认只精读 20 个 GitHub 初筛候选（可选 10 / 20 / 30）；首次最多 5 次模型调用、合计 4600 输出 token，不以 star 代替需求匹配。
+- **按需追加分析**：点击“继续分析 20 个”沿用当前候选和需求，或在“全部 GitHub 结果”点“分析此项目”；跳过已完成项目，显示本次上限与累计用量，支持停止后继续。
 - **全部样本保留**：相关、部分符合、待核实、不相关和未分析分别可看；附推荐理由、差异和逐字证据。
 - **简洁搜索**：首页保留搜索入口；筛选和用量收进“搜索选项”，默认展示推荐项目，可切换全部 GitHub 结果。
 - **原文搜索**：独立于 LLM，可直接搜索中文，不经过词库翻译。
@@ -124,6 +125,7 @@ pip install -r requirements.txt
 python export_lexicon.py --check
 python -m unittest discover -s tests -v
 node --test tests/frontend.test.cjs tests/research-view.test.cjs
+python tests/research-ui-smoke.py
 cd src-tauri
 cargo fmt --check
 cargo test --locked --test core --test research_flow --test prefs_budget --test prefilter_live
