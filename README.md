@@ -1,10 +1,10 @@
 # GitHub Trend & Finder
 
-当前开发版本：**V2.0 Alpha 4**（`2.0.0-alpha.4`，本地 `dev/v2.0` 分支，尚未公开发布）。稳定版 **V1.1** 与原版 **V1.0** 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前发布版本：**V2.0**（`2.0.0`）。[下载 V2.0](https://github.com/MilesDrinkLava/github-Trend-Finder/releases/tag/v2.0.0)。V1.1 与 V1.0 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 V2 试用与边界：[中英文采样 + DeepSeek 筛选](docs/v2-alpha.md)。Skills 暂停。
 
-Alpha 4 的重点是[检索与证据判断架构](docs/v2-search-architecture.md)：需求原文约束、按新增收益调度 GitHub 请求、相似查询去重计分、逐条件核对与程序评分。[可复现评估与局限](reports/v2-alpha4-architecture-eval.md)。
+V2.0 的重点是[检索与证据判断架构](docs/v2-search-architecture.md)：需求原文约束、按新增收益调度 GitHub 请求、相似查询去重计分、逐条件核对与程序评分。[可复现评估与局限](reports/v2-alpha4-architecture-eval.md)。
 
 ## 版本选择
 
@@ -41,7 +41,7 @@ V2 保留原文查询，并用 LLM 扩展中文短词、英文术语及相关表
 - **可用的设置**：GitHub PAT 验证/连接/断开、系统/直连/HTTP(S) 代理及网络测试、样本文件夹选择与打开。
 - 保留发现页、主题、共享请求节流和键盘选择。
 
-下方截图为 V1 界面留档；V2 界面以实际 Alpha 为准。
+下方截图为 V1 界面留档；V2 界面以实际发布版为准。
 
 ![设置界面](docs/screenshot-settings.png)
 

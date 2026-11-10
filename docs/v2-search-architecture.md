@@ -1,4 +1,4 @@
-# V2.0 Alpha 4：检索与证据判断架构
+# V2.0：检索与证据判断架构
 
 本次目标是在固定模型预算下，让初筛选出的项目更值得精读，并让不同批次的判断有统一标准。实现位于 `intent.rs`、`retrieval.rs`、`prefilter.rs`、`judgment.rs`，由 `research.rs` 串联。UI 沿用 Alpha 3。
 

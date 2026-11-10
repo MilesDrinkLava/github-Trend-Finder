@@ -1,6 +1,6 @@
-# V2.0 Alpha 4：按收益检索，按证据判断
+# V2.0：按收益检索，按证据判断
 
-当前开发版本 `2.0.0-alpha.4`，本地 `dev/v2.0` 分支。V1.0、V1.1 的标签与 Release 保留；此前 Alpha 保留在 Git 历史中。Skills 暂停。详细算法及模型协议见[架构说明](v2-search-architecture.md)。
+当前发布版本 `2.0.0`。V1.0、V1.1 保留独立标签与 Release，此前 Alpha 保留在 Git 历史中。Skills 暂停。详细算法及模型协议见[架构说明](v2-search-architecture.md)。
 
 ## 为什么调整
 
