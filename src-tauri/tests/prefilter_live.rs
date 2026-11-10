@@ -1,11 +1,21 @@
 #[allow(dead_code)]
+#[path = "../src/intent.rs"]
+mod intent;
+#[allow(dead_code)]
+#[path = "../src/judgment.rs"]
+mod judgment;
+#[allow(dead_code)]
 #[path = "../src/policy.rs"]
 mod policy;
 #[path = "../src/prefilter.rs"]
+#[allow(dead_code)]
 mod prefilter;
 #[allow(dead_code)]
 #[path = "../src/research.rs"]
 mod research;
+#[allow(dead_code)]
+#[path = "../src/retrieval.rs"]
+mod retrieval;
 use std::collections::HashMap;
 #[test]
 fn replay_live_github_routes_through_production_prefilter() {

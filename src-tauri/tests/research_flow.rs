@@ -1,9 +1,19 @@
+#[allow(dead_code)]
+#[path = "../src/intent.rs"]
+mod intent;
+#[allow(dead_code)]
+#[path = "../src/judgment.rs"]
+mod judgment;
 #[path = "../src/policy.rs"]
 mod policy;
 #[path = "../src/prefilter.rs"]
+#[allow(dead_code)]
 mod prefilter;
 #[path = "../src/research.rs"]
 mod research;
+#[allow(dead_code)]
+#[path = "../src/retrieval.rs"]
+mod retrieval;
 #[path = "../src/review_session.rs"]
 mod review_session;
 use research::*;
@@ -37,6 +47,14 @@ fn plan() -> Plan {
         requirements: vec![],
         queries_zh: vec!["批量改名".into()],
         queries_en: vec!["batch rename".into()],
+        criteria: vec![intent::Criterion {
+            id: String::new(),
+            text: String::new(),
+            mode: intent::Mode::Core,
+            quote: "批量".into(),
+            terms: vec!["批量改名".into(), "batch rename".into()],
+        }],
+        contract_valid: false,
     }
 }
 
@@ -126,6 +144,9 @@ fn server(fail_model: bool) -> Server {
     server_with_delay(fail_model, Duration::ZERO)
 }
 fn server_with_delay(fail_model: bool, delay: Duration) -> Server {
+    server_with_options(fail_model, delay, false)
+}
+fn server_with_options(fail_model: bool, delay: Duration, large: bool) -> Server {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     listener.set_nonblocking(true).unwrap();
     let base = format!("http://{}", listener.local_addr().unwrap());
@@ -138,8 +159,9 @@ fn server_with_delay(fail_model: bool, delay: Duration) -> Server {
                 Ok((mut socket, _)) => {
                     let requests = requests.clone();
                     std::thread::spawn(move || {
+                        socket.set_nonblocking(false).unwrap();
                         socket
-                            .set_read_timeout(Some(Duration::from_secs(5)))
+                            .set_read_timeout(Some(Duration::from_secs(15)))
                             .unwrap();
                         let mut bytes = vec![];
                         let mut buf = [0u8; 8192];
@@ -194,20 +216,55 @@ fn server_with_delay(fail_model: bool, delay: Duration) -> Server {
                                 )
                                 .unwrap();
                                 let output = if input.get("request").is_some() {
-                                    serde_json::to_value(plan()).unwrap()
+                                    if large {
+                                        json!({"intent":"批量改名","criteria":[
+                                            {"mode":"core","quote":"批量改名","terms":["批量改名","batch rename"]},
+                                            {"mode":"must","quote":"Windows","terms":["Windows"]},
+                                            {"mode":"must","quote":"离线","terms":["离线","offline"]},
+                                            {"mode":"must","quote":"中文界面","terms":["中文界面","Chinese UI"]},
+                                            {"mode":"must","quote":"预览","terms":["预览","preview"]},
+                                            {"mode":"prefer","quote":"最好有撤销","terms":["撤销","undo"]}],
+                                            "queries_zh":["批量改名","文件重命名"],"queries_en":["batch rename","file renamer"]})
+                                    } else {
+                                        serde_json::to_value(plan()).unwrap()
+                                    }
                                 } else {
                                     json!({"items":input["candidates"].as_array().unwrap().iter().map(|c|{
-                            let id=c["id"].as_u64().unwrap();
-                            if id==1 {json!({"id":id,"verdict":"match","relevance":99,"category":"app","reason":"中文原生离线改名工具","evidence":[{"source":"description","quote":"离线批量重命名文件"}]})}
-                            else {json!({"id":id,"verdict":"irrelevant","relevance":1,"category":"resource","reason":"是教程集合，不提供改名功能","evidence":[]})}
-                        }).collect::<Vec<_>>()})
+                                        let id=c["id"].as_u64().unwrap();
+                                        json!({"id":id,"type":"app","complete":true,"checks":input["criteria"].as_array().unwrap().iter().map(|criterion|json!([criterion["id"],if id==1 {"y"}else{"n"},c["e"][0]["k"]])).collect::<Vec<_>>()})
+                                    }).collect::<Vec<_>>()})
                                 };
                                 json!({"choices":[{"finish_reason":"stop","message":{"content":output.to_string()}}],"usage":{"prompt_tokens":50,"completion_tokens":30}})
                             }
                         } else if path.starts_with("/search/repositories") {
-                            json!({"total_count":2,"incomplete_results":false,"items":[repo(1,Some("离线批量重命名文件"),0),repo(2,Some("JavaScript learning resources"),500000)]})
+                            if large {
+                                let url =
+                                    reqwest::Url::parse(&format!("http://local{path}")).unwrap();
+                                let size: usize = url
+                                    .query_pairs()
+                                    .find(|(k, _)| k == "per_page")
+                                    .unwrap()
+                                    .1
+                                    .parse()
+                                    .unwrap();
+                                let page_count = requests
+                                    .lock()
+                                    .unwrap()
+                                    .iter()
+                                    .filter(|r| r["path"].as_str().unwrap().starts_with("/search/"))
+                                    .count();
+                                json!({"total_count":1000,"incomplete_results":false,"items":(0..size).map(|n|repo(((page_count-1)*50+n+1) as u64,Some("离线批量改名 Windows 中文界面 预览 撤销"),0)).collect::<Vec<_>>()})
+                            } else {
+                                json!({"total_count":2,"incomplete_results":false,"items":[repo(1,Some("离线批量重命名文件"),0),repo(2,Some("JavaScript learning resources"),500000)]})
+                            }
                         } else {
-                            json!({"content":"5pSv5oyB56a757q/5om56YeP6YeN5ZG95ZCN5paH5Lu2","sha":"abc123","html_url":"https://github.com/owner/project1/blob/main/README.md"})
+                            if large {
+                                use base64::Engine as _;
+                                let readme=format!("批量改名工具。\n\n{}\n\nWindows supported.\n\n离线运行无需联网，支持中文界面。\n\nSupports preview and undo.","通用介绍与示例。".repeat(3000));
+                                json!({"content":base64::engine::general_purpose::STANDARD.encode(readme),"sha":"large","html_url":"https://github.com/owner/project1/blob/main/README.md"})
+                            } else {
+                                json!({"content":"5pSv5oyB56a757q/5om56YeP6YeN5ZG95ZCN5paH5Lu2","sha":"abc123","html_url":"https://github.com/owner/project1/blob/main/README.md"})
+                            }
                         };
                         if path.starts_with("/chat/completions") {
                             std::thread::sleep(delay);
@@ -341,6 +398,54 @@ fn complete_session_samples_both_languages_and_judges_real_ids() {
         .any(|p| p.stage == "sampled"));
 }
 #[test]
+fn initial_six_hundred_pool_with_six_conditions_finishes_twenty_within_wire_budget() {
+    let server = server_with_options(false, Duration::ZERO, true);
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let e = engine(&server.base);
+    // Local transport needs no GitHub rate wait; keep the production request accounting intact.
+    let result = runtime
+        .block_on(e.run(
+            "批量改名，Windows，离线，中文界面，预览，最好有撤销",
+            600,
+            "large",
+            |_| {
+                if let Ok(mut gate) = e.gate.try_lock() {
+                    *gate = Instant::now();
+                }
+            },
+        ))
+        .unwrap();
+    assert_eq!(result.items.len(), 600);
+    assert_eq!(result.plan.criteria.len(), 6);
+    assert!(result.plan.contract_valid);
+    assert_eq!(result.stats.assessed_count, 20);
+    assert_eq!(result.stats.model_calls, 5);
+    assert!(result.stats.model_input_bytes <= 50_000);
+    assert_eq!(result.stats.model_output_limit, 4600);
+    let seen = server.seen.lock().unwrap();
+    let calls: Vec<_> = seen
+        .iter()
+        .filter(|r| r["path"].as_str().unwrap().starts_with("/chat/"))
+        .collect();
+    let total: usize = calls.iter().map(|r| r["body"].to_string().len()).sum();
+    assert_eq!(total, result.stats.model_input_bytes);
+    for call in calls.iter().skip(1) {
+        let input: Value =
+            serde_json::from_str(call["body"]["messages"][1]["content"].as_str().unwrap()).unwrap();
+        assert_eq!(input["criteria"].as_array().unwrap().len(), 6);
+        assert_eq!(input["candidates"].as_array().unwrap().len(), 5);
+        assert_eq!(call["body"]["thinking"]["type"], "disabled");
+        assert_eq!(call["body"]["max_tokens"], 1000);
+    }
+    println!(
+        "600 -> 20; {} calls; {} request bytes; {} search requests",
+        result.stats.model_calls, total, result.stats.search_requests
+    );
+}
+#[test]
 fn invalid_model_key_stops_before_sampling() {
     let server = server(true);
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -423,13 +528,14 @@ fn prior_pool() -> ResearchResult {
                 matched: vec![],
                 gaps: vec![],
                 evidence: vec![],
+                checks: vec![],
             });
         }
     }
     ResearchResult {
         query: "批量改名".into(),
         session: "current-search".into(),
-        plan: plan(),
+        plan: intent::compile("批量改名", plan()).0,
         queries: vec!["批量改名".into()],
         items,
         stats: Stats {

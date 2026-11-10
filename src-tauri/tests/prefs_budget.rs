@@ -1,6 +1,12 @@
 #[allow(dead_code)]
 #[path = "../src/connections.rs"]
 mod connections;
+#[allow(dead_code)]
+#[path = "../src/intent.rs"]
+mod intent;
+#[allow(dead_code)]
+#[path = "../src/judgment.rs"]
+mod judgment;
 #[path = "../src/policy.rs"]
 mod policy;
 #[allow(dead_code)]
@@ -12,6 +18,9 @@ mod prefilter;
 #[allow(dead_code)]
 #[path = "../src/research.rs"]
 mod research;
+#[allow(dead_code)]
+#[path = "../src/retrieval.rs"]
+mod retrieval;
 use serde_json::json;
 use std::collections::HashMap;
 use std::io::{Read, Write};

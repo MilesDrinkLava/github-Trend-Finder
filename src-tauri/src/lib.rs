@@ -1,10 +1,13 @@
 mod connections;
+mod intent;
+mod judgment;
 mod lexicon;
 mod model_config;
 mod policy;
 mod preferences;
 mod prefilter;
 mod research;
+mod retrieval;
 mod review_commands;
 mod review_session;
 mod settings_commands;

@@ -54,7 +54,7 @@
         ${!a ? `<button class="quiet-btn review-project" data-id="${c.id}" title="仅分析这个项目：最多 1 次模型调用、1000 输出 token" aria-label="分析 ${esc(c.full_name)}，最多 1 次调用和 1000 输出 token">分析此项目</button>` : ''}
         <button class="quiet-btn open-repo">在 GitHub 打开</button></div>
         <details${open.has(url) ? ' open' : ''}><summary>查看判断依据</summary><div class="research-evidence">${a?.gaps?.length ? `<p>缺口或未验证：${esc(a.gaps.join('；'))}</p>` : ''}
-        ${(a?.evidence || []).map(e => `<blockquote>${esc(e.quote)}<cite>${esc(e.source === 'readme' ? '项目说明' : e.source === 'topics' ? '项目标签' : '项目描述')}</cite></blockquote>`).join('')}
+        ${(a?.evidence || []).map(e => `<blockquote>${esc(e.quote)}<cite>${esc(e.source === 'readme' ? '项目说明' : e.source === 'topics' ? '项目标签' : e.source === 'license' ? '许可证元数据' : '项目描述')}</cite></blockquote>`).join('')}
         <p>GitHub 初筛：${esc((c.prefilter_reasons || []).join('；'))}</p><p>检索词：${esc((c.recalled_by || []).join(' / '))}</p>${!a ? '<p>这是 GitHub 候选，不代表已通过 AI 或运行验证。</p>' : ''}${c.readme_url ? '<p>已读取项目说明；未安装或执行项目代码。</p>' : ''}</div></details></article>`;
     }).join('') || '<p class="research-empty">暂时没有符合这组条件的推荐。可以查看“全部 GitHub 结果”，或继续分析下一批。</p>';
     list.scrollTop = scroll;
