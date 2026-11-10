@@ -1,0 +1,160 @@
+{
+  "checked_at": "2026-11-10T04:25:59.267109+00:00",
+  "scope": "公开 GitHub 检索冒烟，不含真实 LLM 判断",
+  "queries": [
+    {
+      "query": "批量重命名",
+      "total_count": 236156,
+      "incomplete_results": false,
+      "samples": [
+        {
+          "id": 631254164,
+          "full_name": "songquanpeng/one-api",
+          "stars": 37378,
+          "description": "LLM API 管理 & 分发系统，支持 OpenAI、Azure、Anthropic Claude、Google Gemini、DeepSeek、字节豆包、ChatGLM、文心一言、讯飞星火、通义千问、360 智脑、腾讯混元等主流模型，统一 API 适配，可用于 key 管理与二次分发。单可执行文件，提供 Docker 镜像，一键部署，开箱即用。LLM API management & key redistribution system, unifying multiple providers under a single API. Single binary, Docker-ready, with an English UI.",
+          "html_url": "https://github.com/songquanpeng/one-api"
+        },
+        {
+          "id": 1135492298,
+          "full_name": "jlcodes99/cockpit-tools",
+          "stars": 19851,
+          "description": " 🚀 通用 AI IDE 账号管理工具：支持 Antigravity / Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini-cli / CodeBuddy，多账号切换、配额监控、自动唤醒与多开实例管理。 🚀 Universal AI IDE account manager for Antigravity / Codex / GitHub Copilot / Windsurf / Kiro / Cursor / Gemini-cli / CodeBuddy, with multi-account switching, quota monitoring, wake-up automation, and multi-insta",
+          "html_url": "https://github.com/jlcodes99/cockpit-tools"
+        },
+        {
+          "id": 360366759,
+          "full_name": "liupan1890/aliyunpan",
+          "stars": 11786,
+          "description": "阿里云盘小白羊版  阿里云盘PC版 aliyundriver",
+          "html_url": "https://github.com/liupan1890/aliyunpan"
+        },
+        {
+          "id": 974186260,
+          "full_name": "sansan0/TrendRadar",
+          "stars": 63560,
+          "description": "⭐AI-driven public opinion & trend monitor with multi-platform aggregation, RSS, and smart alerts.🎯 告别信息过载，你的 AI 舆情监控助手与热点筛选工具！聚合多平台热点 +  RSS 订阅，支持关键词精准筛选。AI 智能筛选新闻 + AI 翻译 +  AI 分析简报直推手机，也支持接入 MCP 架构，赋能 AI 自然语言对话分析、情感洞察与趋势预测等。支持 Docker ，数据本地/云端自持。集成微信/飞书/钉钉/Telegram/邮件/ntfy/bark/slack 等渠道智能推送。",
+          "html_url": "https://github.com/sansan0/TrendRadar"
+        },
+        {
+          "id": 15183485,
+          "full_name": "julycoding/The-Art-Of-Programming-By-July-2nd",
+          "stars": 21510,
+          "description": "本项目曾冲到全球第一，干货集锦见本页面最底部，另完整精致的纸质版《编程之法：面试和算法心得》已在京东/当当上销售",
+          "html_url": "https://github.com/julycoding/The-Art-Of-Programming-By-July-2nd"
+        },
+        {
+          "id": 1037962296,
+          "full_name": "su-kaka/agy2api",
+          "stars": 5326,
+          "description": "将 Antigravity 转换为 OpenAI 、GEMINI 和 Claude API 接口",
+          "html_url": "https://github.com/su-kaka/agy2api"
+        },
+        {
+          "id": 1131513930,
+          "full_name": "ZhuLinsen/daily_stock_analysis",
+          "stars": 69099,
+          "description": "LLM 驱动的多市场股票智能分析系统：多源行情、实时新闻、决策看板与自动推送，支持零成本定时运行。  LLM-powered multi-market stock analysis system with multi-source market data, real-time news, decision dashboard, automated notifications, and cost-free scheduled runs.",
+          "html_url": "https://github.com/ZhuLinsen/daily_stock_analysis"
+        },
+        {
+          "id": 1249712804,
+          "full_name": "huilang-me/CF-Server-Monitor",
+          "stars": 3053,
+          "description": "一个基于 Cloudflare Workers + D1 + Durable Objects 的免费多服务器监控探针系统，支持实时监控、离线告警，到期通知，历史数据查看、延迟追踪、地图展示等功能。兼容主流Linux系统，Alpine Linux，OpenWrt，macOS，群晖 DSM、飞牛 fnOS、Windows系统。",
+          "html_url": "https://github.com/huilang-me/CF-Server-Monitor"
+        },
+        {
+          "id": 673881338,
+          "full_name": "qiye45/wechatDownload",
+          "stars": 10023,
+          "description": "微信公众号文章批量下载工具，支持评论、合集下载，支持保存html/mhtml/md/pdf/docx/csv文件，保存文章内图片、视频、音频文件，支持MCP/Skill调用",
+          "html_url": "https://github.com/qiye45/wechatDownload"
+        },
+        {
+          "id": 616738094,
+          "full_name": "myhhub/stock",
+          "stars": 15079,
+          "description": "stock股票.获取股票数据,计算股票指标,筹码分布,识别股票形态,综合选股,选股策略,股票验证回测,股票自动交易,支持PC及移动设备。",
+          "html_url": "https://github.com/myhhub/stock"
+        }
+      ]
+    },
+    {
+      "query": "batch rename",
+      "total_count": 162238,
+      "incomplete_results": false,
+      "samples": [
+        {
+          "id": 16229937,
+          "full_name": "rodi01/RenameIt",
+          "stars": 1394,
+          "description": "Keep your Sketch files organized, batch rename layers and artboards.",
+          "html_url": "https://github.com/rodi01/RenameIt"
+        },
+        {
+          "id": 100149945,
+          "full_name": "thameera/vimv",
+          "stars": 689,
+          "description": "Batch-rename files using Vim",
+          "html_url": "https://github.com/thameera/vimv"
+        },
+        {
+          "id": 552635490,
+          "full_name": "OwO-Network/DLX",
+          "stars": 8779,
+          "description": "DLX - Self-hosted translation API server. Unofficial; not affiliated with DeepL SE.",
+          "html_url": "https://github.com/OwO-Network/DLX"
+        },
+        {
+          "id": 2881789,
+          "full_name": "geekcomputers/Python",
+          "stars": 35478,
+          "description": "My Python Examples",
+          "html_url": "https://github.com/geekcomputers/Python"
+        },
+        {
+          "id": 256390681,
+          "full_name": "yaa110/nomino",
+          "stars": 714,
+          "description": "Batch rename utility for developers",
+          "html_url": "https://github.com/yaa110/nomino"
+        },
+        {
+          "id": 467962355,
+          "full_name": "reorx/obsidian-paste-image-rename",
+          "stars": 427,
+          "description": "Renames pasted images and all the other attachments added to the vault",
+          "html_url": "https://github.com/reorx/obsidian-paste-image-rename"
+        },
+        {
+          "id": 139961348,
+          "full_name": "xuejianxianzun/PixivBatchDownloader",
+          "stars": 5774,
+          "description": "Powerful Pixiv batch downloader. Batch download artworks and novels, filter works, rename when downloading, convert animated images, and more. 浏览器扩展程序，批量下载 Pixiv 上的插画和小说。过滤作品、下载时重命名、转换动态图片等。",
+          "html_url": "https://github.com/xuejianxianzun/PixivBatchDownloader"
+        },
+        {
+          "id": 799320815,
+          "full_name": "iyaja/llama-fs",
+          "stars": 5830,
+          "description": "A self-organizing file system with llama 3",
+          "html_url": "https://github.com/iyaja/llama-fs"
+        },
+        {
+          "id": 107178928,
+          "full_name": "jkwill87/mnamer",
+          "stars": 1170,
+          "description": "media file renaming and organizing tool",
+          "html_url": "https://github.com/jkwill87/mnamer"
+        },
+        {
+          "id": 452141555,
+          "full_name": "vasusen-code/SaveRestrictedContentBot",
+          "stars": 1915,
+          "description": "Stable telegram bot to save Restricted content with custom thumbnail support.",
+          "html_url": "https://github.com/vasusen-code/SaveRestrictedContentBot"
+        }
+      ]
+    }
+  ]
+}

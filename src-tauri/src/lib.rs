@@ -1,18 +1,20 @@
 mod lexicon;
+mod model_config;
 mod policy;
+mod research;
 use policy::retry_delay;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use futures_util::StreamExt;
 use lexicon::Lexicon;
 use serde::{Deserialize, Serialize};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 const API: &str = "https://api.github.com/search/repositories";
 const CACHE_TTL: Duration = Duration::from_secs(6 * 3600);
@@ -21,7 +23,11 @@ pub struct AppState {
     lex: Lexicon,
     client: reqwest::Client,
     cache: Mutex<HashMap<String, (Instant, Vec<Item>)>>,
-    request_gate: tokio::sync::Mutex<Instant>,
+    request_gate: Arc<tokio::sync::Mutex<Instant>>,
+    research_generation: Arc<AtomicU64>,
+    research_cache: research::PageCache,
+    active_research: Mutex<String>,
+    research_results: Mutex<HashMap<String, (Instant, research::ResearchResult)>>,
     search_generation: AtomicU64,
     trend_generation: AtomicU64,
     trans_cache: Mutex<HashMap<String, String>>,
@@ -296,14 +302,16 @@ async fn search(query: String, limit: Option<usize>, app: tauri::AppHandle) -> S
         error: String::new(),
     };
 
-    if english.is_empty() {
-        out.error = "没认出中文里的关键词，换个说法试试".into();
+    if query.is_empty() {
+        out.error = "请输入搜索内容".into();
         return out;
     }
-
     match state
         .github_items(
-            &format!("{english} archived:false"),
+            &format!(
+                "{} is:public in:name,description,readme",
+                query.chars().take(220).collect::<String>()
+            ),
             limit,
             "",
             CACHE_TTL,
@@ -322,6 +330,173 @@ async fn search(query: String, limit: Option<usize>, app: tauri::AppHandle) -> S
     }
 
     out
+}
+
+#[tauri::command]
+async fn smart_search(
+    query: String,
+    target: Option<usize>,
+    refresh: Option<bool>,
+    session: String,
+    app: tauri::AppHandle,
+) -> Result<research::ResearchResult, String> {
+    let state = app.state::<AppState>();
+    let id = {
+        let mut active = state.active_research.lock().map_err(|_| "会话锁异常")?;
+        let id = state.research_generation.fetch_add(1, Ordering::Relaxed) + 1;
+        *active = session.clone();
+        id
+    };
+    let query = query.trim();
+    if query.is_empty() || query.chars().count() > 500 {
+        return Err("请输入 1–500 字的搜索需求".into());
+    }
+    let config = model_config::load()?;
+    if config.api_key.is_empty() {
+        return Err("请先在设置中保存 DeepSeek API Key，或切换原文搜索".into());
+    }
+    let target = target.unwrap_or(600).clamp(100, 2000);
+    let github_token = load_token();
+    let mut scope = std::collections::hash_map::DefaultHasher::new();
+    (query, target, &config.model, &config.api_key, &github_token).hash(&mut scope);
+    let cache_key = scope.finish().to_string();
+    if refresh.unwrap_or(false) {
+        if let Ok(mut cache) = state.research_results.lock() {
+            cache.remove(&cache_key);
+        }
+        if let Ok(mut cache) = state.research_cache.lock() {
+            cache.clear();
+        }
+    }
+    let cached = {
+        state.research_results.lock().ok().and_then(|cache| {
+            cache
+                .get(&cache_key)
+                .filter(|(t, _)| t.elapsed() < Duration::from_secs(1800))
+                .map(|(_, r)| r.clone())
+        })
+    };
+    if let Some(mut result) = cached {
+        result.session = session;
+        result.source = "cache".into();
+        result.stats.model_calls = 0;
+        result.stats.prompt_tokens = 0;
+        result.stats.completion_tokens = 0;
+        return Ok(result);
+    }
+    let engine = research::Engine {
+        client: reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .redirect(reqwest::redirect::Policy::none())
+            .user_agent(concat!("gh-finder/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|_| "初始化研究客户端失败")?,
+        endpoints: research::Endpoints::default(),
+        github_token,
+        api_key: config.api_key,
+        model: config.model,
+        gate: state.request_gate.clone(),
+        cache: state.research_cache.clone(),
+        cancel: research::Cancellation {
+            generation: state.research_generation.clone(),
+            id,
+        },
+    };
+    let run = engine.run(query, target, &session, |progress| {
+        let _ = app.emit("research-progress", progress);
+    });
+    let result = tokio::time::timeout(Duration::from_secs(900), run)
+        .await
+        .map_err(|_| "已到 15 分钟会话上限，当前已显示的样本仍可查看".to_string())??;
+    if result.warnings.is_empty() && result.stats.assessed_count == result.items.len() {
+        if let Ok(mut cache) = state.research_results.lock() {
+            if cache.len() >= 8 {
+                cache.clear();
+            }
+            cache.insert(cache_key, (Instant::now(), result.clone()));
+        }
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+fn cancel_smart_search(session: String, app: tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    if let Ok(active) = state.active_research.lock() {
+        if *active == session {
+            state.research_generation.fetch_add(1, Ordering::Relaxed);
+        }
+    };
+}
+#[tauri::command]
+fn model_settings() -> Result<model_config::ModelStatus, String> {
+    Ok(model_config::load()?.status())
+}
+#[tauri::command]
+fn save_model_settings(
+    api_key: String,
+    model: String,
+    clear_key: bool,
+    app: tauri::AppHandle,
+) -> Result<model_config::ModelStatus, String> {
+    app.state::<AppState>()
+        .research_generation
+        .fetch_add(1, Ordering::Relaxed);
+    model_config::save(api_key, model, clear_key)
+}
+#[tauri::command]
+fn export_research(payload: String) -> Result<String, String> {
+    if payload.len() > 16 * 1024 * 1024 {
+        return Err("样本文件过大".into());
+    }
+    let value: serde_json::Value = serde_json::from_str(&payload).map_err(|_| "样本 JSON 无效")?;
+    if !value["items"]
+        .as_array()
+        .map(|x| x.len() <= 2000)
+        .unwrap_or(false)
+    {
+        return Err("样本数量无效".into());
+    }
+    let root = PathBuf::from(std::env::var("USERPROFILE").map_err(|_| "找不到用户目录")?)
+        .join("Downloads");
+    std::fs::create_dir_all(&root).map_err(|_| "创建下载目录失败")?;
+    let stamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "系统时间异常")?
+        .as_millis();
+    let path = root.join(format!("gh-finder-v2-samples-{stamp}.json"));
+    std::fs::write(&path, payload).map_err(|_| "保存样本失败")?;
+    Ok(path.display().to_string())
+}
+#[tauri::command]
+async fn test_model_connection() -> Result<String, String> {
+    let config = model_config::load()?;
+    if config.api_key.is_empty() {
+        return Err("请先保存 DeepSeek API Key".into());
+    }
+    let response = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(|_| "初始化连接失败")?
+        .get("https://api.deepseek.com/models")
+        .timeout(Duration::from_secs(20))
+        .bearer_auth(&config.api_key)
+        .send()
+        .await
+        .map_err(|_| "连接 DeepSeek 失败，请检查网络")?;
+    if !response.status().is_success() {
+        return Err(format!("DeepSeek 返回 HTTP {}", response.status().as_u16()));
+    }
+    let value: serde_json::Value = response.json().await.map_err(|_| "模型列表格式错误")?;
+    let available = value["data"]
+        .as_array()
+        .map(|a| a.iter().any(|m| m["id"].as_str() == Some(&config.model)))
+        .unwrap_or(false);
+    if available {
+        Ok(format!("连接成功，{} 可用（未生成内容）", config.model))
+    } else {
+        Err("密钥有效，但当前账号的模型列表中没有所选模型".into())
+    }
 }
 
 /// 自 1970-01-01 起的天数 → (年, 月, 日)。Howard Hinnant 的 civil_from_days。
@@ -555,13 +730,23 @@ pub fn run() {
             lex: Lexicon::load(),
             client,
             cache: Mutex::new(HashMap::new()),
-            request_gate: tokio::sync::Mutex::new(Instant::now()),
+            request_gate: Arc::new(tokio::sync::Mutex::new(Instant::now())),
+            research_generation: Arc::new(AtomicU64::new(0)),
+            research_cache: Arc::new(Mutex::new(HashMap::new())),
+            active_research: Mutex::new(String::new()),
+            research_results: Mutex::new(HashMap::new()),
             search_generation: AtomicU64::new(0),
             trend_generation: AtomicU64::new(0),
             trans_cache: Mutex::new(HashMap::new()),
         })
         .invoke_handler(tauri::generate_handler![
             search,
+            smart_search,
+            cancel_smart_search,
+            model_settings,
+            save_model_settings,
+            test_model_connection,
+            export_research,
             trending,
             translate,
             token_status,

@@ -586,6 +586,7 @@
     *,*::before,*::after{animation-duration:.001ms !important;transition-duration:.001ms !important}
   }
 </style>
+<link rel="stylesheet" href="research.css">
 </head>
 <body>
 <div class="win">
@@ -644,6 +645,24 @@
         </svg>
         <input id="q" value="" placeholder="用中文描述你要找的项目" spellcheck="false" autocomplete="off" aria-label="搜索 GitHub 项目">
       </label>
+
+      <div class="research-toolbar">
+        <select id="searchMode" aria-label="搜索模式"><option value="smart">智能采样筛选</option><option value="raw">原文搜索</option></select>
+        <label>采样上限<select id="sampleBudget"><option>300</option><option selected>600</option><option>1200</option><option>2000</option></select></label>
+        <button class="btn primary" id="researchStart">采样并筛选</button>
+        <button class="btn" id="researchCancel" disabled>停止</button>
+      </div>
+      <div class="research-panel" id="researchPanel">
+        <div id="researchStatus" role="status">保留原文，扩展中英文查询，分批判断所有候选</div>
+        <div id="researchCounts"></div>
+        <div class="research-controls">
+          <select id="researchFilter" aria-label="匹配状态"><option value="all">全部样本</option><option value="recommended">相关与部分符合</option><option value="uncertain">待核实 / 未分析</option><option value="irrelevant">不相关</option></select>
+          <select id="researchCategory" aria-label="项目类别"><option value="all">全部类别</option><option value="app">应用</option><option value="library">库</option><option value="framework">框架</option><option value="plugin">插件</option><option value="resource">资源集合</option><option value="example">示例</option></select>
+          <select id="researchSort" aria-label="结果排序"><option value="relevance">相关度与热度加权</option><option value="original">原始召回顺序</option><option value="stars">Star 排序</option></select>
+          <label><input id="relevanceWeight" type="range" min="0" max="100" value="100"><span id="weightValue">100% 相关度</span></label>
+        </div>
+        <details class="research-diagnostics"><summary>检索详情与用量</summary><p id="researchUsage"></p><p id="researchPlan"></p><p id="researchWarnings"></p><button class="btn" id="researchExport">保存全部样本 JSON</button> <button class="btn" id="researchRefresh">重新采样（忽略缓存）</button></details>
+      </div>
 
       <div class="filebar" id="filebar" hidden>
         静态预览，数据是写死的。真实搜索请运行 <code>python app/server.py</code>
@@ -754,7 +773,7 @@
           <div class="item">
             <div>
               <div class="label">翻译引擎</div>
-              <div class="sub">内置免费翻译；DeepSeek 接入中</div>
+              <div class="sub">免费描述翻译仅用于原文搜索；智能筛选使用下方 DeepSeek 设置</div>
             </div>
             <div class="seg small">
               <button class="on">免费</button>
@@ -763,15 +782,14 @@
             </div>
           </div>
           <div class="item">
-            <div>
-              <div class="label">API Key（预留）</div>
-              <div class="sub">接入 DeepSeek 后启用，只存本机</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input class="input" type="password" placeholder="sk-…" style="width:150px" disabled>
-              <button class="btn" disabled>测试</button>
-            </div>
+            <div><div class="label">DeepSeek 智能筛选</div><div class="sub" id="deepseekStatus">尚未配置密钥</div></div>
+            <select class="input" id="deepseekModel" aria-label="DeepSeek 模型"><option value="deepseek-flash">deepseek-flash</option><option value="deepseek-v4-pro">deepseek-v4-pro</option></select>
           </div>
+          <div class="item">
+            <div><div class="label">DeepSeek API Key</div><div class="sub">仅保存在本机配置文件；留空保存会保留原密钥</div></div>
+            <div class="deepseek-actions"><input class="input" id="deepseekKey" type="password" autocomplete="off" placeholder="sk-…"><button class="btn primary" id="deepseekSave">保存</button><button class="btn" id="deepseekClear">清除</button></div>
+          </div>
+          <div class="item"><div><div class="label">检查连接</div><div class="sub">仅获取模型列表，不生成内容。采样和筛选会产生模型用量</div></div><button class="btn" id="deepseekTest">测试连接</button></div>
         </div>
 
         <div class="group">
@@ -796,7 +814,7 @@
           </div>
           <div class="item">
             <div><div class="label">本地存储</div></div>
-            <div class="value">仅保存访问 token</div>
+            <div class="value">访问 token、模型密钥和导出样本</div>
           </div>
         </div>
 
@@ -808,7 +826,7 @@
               </svg>
             </div>
             <div>
-              <div class="about-name">GitHub Trend &amp; Finder<span>V1.1</span></div>
+              <div class="about-name">GitHub Trend &amp; Finder<span>V2.0 Alpha</span></div>
               <div class="about-sub">用中文搜 GitHub 开源项目</div>
             </div>
           </div>
@@ -823,7 +841,7 @@
 
       <footer>
         <div class="keys"><span>GitHub Trend &amp; Finder · Tauri 2</span></div>
-        <div class="status">V1.1</div>
+        <div class="status">V2.0 Alpha</div>
       </footer>
     </section>
   </main>
@@ -1222,6 +1240,7 @@ let debounceT = null;
 let composing = false;
 $("#q").addEventListener("compositionstart", () => {
   composing = true;
+  window.researchUI?.invalidate();
   clearTimeout(debounceT);
   searchRequest++;
   gen++;
@@ -1240,6 +1259,7 @@ $("#q").addEventListener("input", e => {
     searchRequest++;
     gen++;
     if (fetchCtl) fetchCtl.abort();
+    if (window.researchUI?.enabled()) { window.researchUI.invalidate(); return; }
     if (!v) { liveSearch(""); return; }
     debounceT = setTimeout(() => liveSearch(v), 320);
     return;
@@ -1255,7 +1275,8 @@ $$("#empty .empty-chips button").forEach(b => {
     $("#q").value = b.dataset.q;
     $("#q").focus();
     clearTimeout(debounceT);
-    liveSearch(b.dataset.q, true);
+    if (window.researchUI?.enabled()) window.researchUI.search();
+    else liveSearch(b.dataset.q, true);
   });
 });
 
@@ -1304,7 +1325,7 @@ trSwitch.addEventListener("click", e => {
     });
     for (const {items} of hotCache.values()) items.forEach(r => { r.d = r.en; });
   }
-  if (translateOn) liveSearch($("#q").value.trim(), false);
+  if (translateOn && !window.researchUI?.enabled()) liveSearch($("#q").value.trim(), false);
 });
 
 async function refreshTokenStatus(){
@@ -1375,5 +1396,7 @@ if (TAURI || LIVE){
   renderResults("", true);
 }
 </script>
+<script src="research-view.js"></script>
+<script src="research.js"></script>
 </body>
 </html>

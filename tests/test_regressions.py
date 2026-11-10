@@ -75,6 +75,11 @@ class CacheTests(unittest.TestCase):
         self.con.execute("UPDATE query_cache SET fetched_at = 'not-a-date'")
         self.assertIsNone(remote._cache_get(self.con, "bad"))
 
+    def test_raw_mode_preserves_unrecognized_chinese(self):
+        with patch.object(remote, "_api", return_value=[]) as api:
+            remote.search("仅原生中文的小众词汇", token="", con=self.con, raw=True)
+        self.assertEqual(api.call_args.args[0], "仅原生中文的小众词汇")
+
     def test_fallback_preserves_archived_filter(self):
         row = dict(full_name="a/archived", description="", stars=1, language="Python",
                    pushed_at="", archived=1, topics="", html_url="")

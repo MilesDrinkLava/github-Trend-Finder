@@ -113,7 +113,7 @@ def _api(q: str, limit: int, token, extra: str, retries: int = 1):
 
 
 def search(query: str, limit: int = 10, token=None, extra: str = "",
-           con=None, use_cache: bool = True):
+           con=None, use_cache: bool = True, raw: bool = False):
     """返回 dict：{query, english, groups, raw_cn, source, items, error}。
 
     source 取值：
@@ -121,7 +121,7 @@ def search(query: str, limit: int = 10, token=None, extra: str = "",
       cache  —— 6 小时内的缓存
       local  —— 断网/限速时退回本地索引（结果质量低于 GitHub）
     """
-    english, groups, raw_cn = build(query)
+    english, groups, raw_cn = (query.strip(), [], []) if raw else build(query)
     limit = max(1, min(100, int(limit)))
     credential = token if token is not None else load_token()
     out = {

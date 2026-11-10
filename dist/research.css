@@ -1,0 +1,36 @@
+/* V2 adds a research work area while retaining the app's existing palette and type. */
+.win {width:min(1060px,96vw);height:min(850px,94vh)}
+.search-head {margin-bottom:12px}
+.research-toolbar {display:flex;align-items:center;gap:9px;margin:0 28px 10px;flex-wrap:wrap}
+.research-toolbar label {font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.research-toolbar .btn.primary {margin-left:auto}
+.research-toolbar select,.research-controls select {border:1px solid var(--line);border-radius:7px;background:var(--win-solid);color:var(--text);padding:6px 7px;font:12px var(--font)}
+.research-panel {margin:0 28px 12px;padding:12px 0;border-block:1px solid var(--line);flex:none}
+.research-panel[hidden] {display:none}
+#researchStatus {font-size:12.5px;color:var(--text-dim);line-height:1.5}
+#researchCounts {font-size:11.5px;color:var(--muted);margin-top:4px;font-variant-numeric:tabular-nums}
+.research-controls {display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}
+.research-controls label {display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted)}
+.research-controls input[type=range] {width:90px;accent-color:var(--accent)}
+.research-diagnostics {margin-top:8px;color:var(--muted);font-size:11.5px;line-height:1.6}
+.research-diagnostics p {margin-top:5px;overflow-wrap:anywhere}
+#researchWarnings {color:var(--hot)}
+.research-card.row {display:block;border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin-bottom:9px;cursor:default}
+.research-card-head {display:flex;align-items:start;justify-content:space-between;gap:12px}
+.research-card-head strong {font-size:14px;font-weight:600;overflow-wrap:anywhere}
+.verdict {font-size:10.5px;white-space:nowrap;border-radius:5px;padding:2px 7px;color:var(--muted);background:var(--surface-2)}
+.verdict.match {color:var(--green)}
+.verdict.partial,.verdict.uncertain {color:var(--hot)}
+.research-description {font-size:12px;line-height:1.6;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.research-meta {display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:10.5px;margin-top:7px}
+.research-reason {font-size:12px;line-height:1.6;margin-top:9px;color:var(--text-dim)}
+.research-gaps {font-size:11.5px;line-height:1.6;color:var(--hot);margin-top:5px}
+.research-card details {font-size:11px;color:var(--muted);margin-top:9px}
+.research-card summary,.research-diagnostics summary {cursor:pointer}
+.research-evidence {padding-top:7px;line-height:1.7;overflow-wrap:anywhere}
+.research-evidence blockquote {margin-top:7px;border-left:2px solid var(--accent);padding-left:9px;color:var(--text-dim)}
+.research-evidence cite {display:block;font-style:normal;font-size:10px;color:var(--muted)}
+.research-empty {padding:32px 16px;text-align:center;font-size:12px;line-height:1.7;color:var(--muted)}
+.deepseek-actions {display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.deepseek-actions .input {width:180px}
+@media(max-width:800px){.research-toolbar,.research-panel{margin-left:18px;margin-right:18px}.research-controls{gap:5px}.research-toolbar .btn{padding:6px 9px}.research-meta{gap:8px}}

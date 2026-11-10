@@ -56,7 +56,7 @@ class Handler(SimpleHTTPRequestHandler):
                                "raw_cn": [], "source": "none"})
 
         try:
-            result = remote.search(query, limit=limit, extra="archived:false")
+            result = remote.search(query, limit=limit, extra="is:public in:name,description,readme", raw=True)
         except Exception as e:  # remote.search 内部已兜底，这里只防意外
             return self._json({"error": _short_error(e), "english": "", "items": [],
                                "raw_cn": [], "source": "error"}, 500)
