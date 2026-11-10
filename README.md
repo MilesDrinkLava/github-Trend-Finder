@@ -1,6 +1,6 @@
 # GitHub Trend & Finder
 
-当前开发版本：**V2.0 Alpha**（`2.0.0-alpha.1`，本地 `dev/v2.0` 分支，尚未公开发布）。稳定版 **V1.1** 与原版 **V1.0** 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
+当前开发版本：**V2.0 Alpha 2**（`2.0.0-alpha.2`，本地 `dev/v2.0` 分支，尚未公开发布）。稳定版 **V1.1** 与原版 **V1.0** 保留独立 Release。版本记录见 [CHANGELOG.md](CHANGELOG.md)。
 
 V2 试用与边界：[中英文采样 + DeepSeek 筛选](docs/v2-alpha.md)。Skills 暂停。
 
@@ -15,7 +15,7 @@ V2 试用与边界：[中英文采样 + DeepSeek 筛选](docs/v2-alpha.md)。Ski
 
 V1.0 的原标签和原安装包保持不变。请按所需版本进入对应发布页下载；两版安装为同一应用的升级关系。
 
-> 保留原生中文内容，扩展中英文检索表达，拉取候选后用 DeepSeek 分批分析。
+> 保留原生中文内容，扩展中英文检索表达，先用 GitHub 初筛，再用 DeepSeek 精读少量候选。
 
 ![搜索界面](docs/screenshot-search.png)
 
@@ -23,18 +23,19 @@ V1.0 的原标签和原安装包保持不变。请按所需版本进入对应发
 
 GitHub 本来就有大量中文开发者及中文 README。V1 的单向词库翻译会漏掉原生中文内容，也无法充分表达真实需求。
 
-V2 保留原文查询，并用 LLM 扩展中文短词、英文术语及相关表达；从多路结果中采样、去重，再依据原描述和 README 判断适用性。低 star、中文项目和旧项目不会在召回时被自动排除。
+V2 保留原文查询，并用 LLM 扩展中文短词、英文术语及相关表达；从多路结果中采样、去重，先融合 GitHub 各路相关性排名，再只对入选候选依据原描述和 README 判断适用性。低 star、中文项目和旧项目不会在召回时被自动排除。
 
 ## 功能
 
-- **智能采样**：保留原文，最多扩展 3 条中文与 3 条英文查询，轮流翻页、按仓库 ID 去重；预算 300 / 600 / 1200 / 2000。
-- **DeepSeek 筛选**：逐批分析全部采样候选，再对最多 20 个强候选或待核实项目读取 README 复审；不以 star 代替需求匹配。
+- **智能采样**：保留原文，最多扩展 3 条中文与 3 条英文查询，轮流翻页、按仓库 ID 去重；上限 200 / 600 / 1200 / 2000。
+- **DeepSeek 筛选**：默认只精读 20 个 GitHub 初筛候选（可选 10 / 20 / 30）；最多 5 次模型调用、合计 4600 输出 token，不以 star 代替需求匹配。
 - **全部样本保留**：相关、部分符合、待核实、不相关和未分析分别可看；附推荐理由、差异和逐字证据。
-- **本地筛选与调权**：类别、原始顺序、star、相关度/热度权重，不重复调用模型。
+- **简洁搜索**：首页保留搜索入口；筛选和用量收进“搜索选项”，默认展示推荐项目，可切换全部 GitHub 结果。
 - **原文搜索**：独立于 LLM，可直接搜索中文，不经过词库翻译。
-- **进度、停止与导出**：显示采样和分析数量，停止旧会话，导出全部样本 JSON；重复请求可复用分析缓存。
+- **进度、停止与导出**：显示采样和分析数量，停止旧会话，按设置目录自动保存全部 GitHub 样本、精读名单、模型请求/响应和用量；重复请求可复用分析缓存。
 - **DeepSeek 设置**：官方接口，支持模型选择、保存/清除密钥及只读模型列表连接测试。
-- 保留发现页、主题、PAT、共享请求节流和键盘选择。
+- **可用的设置**：GitHub PAT 验证/连接/断开、系统/直连/HTTP(S) 代理及网络测试、样本文件夹选择与打开。
+- 保留发现页、主题、共享请求节流和键盘选择。
 
 下方截图为 V1 界面留档；V2 界面以实际 Alpha 为准。
 
@@ -58,14 +59,14 @@ Windows 10 / 11 x64：
 | 在浏览器打开 | `Enter`（或双击） |
 | 切换主题 | 侧栏底部太阳图标 |
 
-**提高请求配额**：在 GitHub → Settings → Developer settings → Personal access tokens 生成一个 **不需要任何 scope** 的 token，粘贴到设置页保存即可。
+**提高请求配额**：在 GitHub → Settings → Developer settings → Personal access tokens 生成一个 **不需要任何 scope** 的 token，粘贴到设置页，点击“验证并连接”。
 
 ## 工作原理
 
 ```text
 原始需求 → 原文查询 + LLM 中英文扩展 → 多路采样与去重
-        → 全部候选分批判断 → 少量 README 深读复审
-        → 卡片、理由、证据、分类与可调权重
+        → GitHub 相关性排名融合初筛 → 仅 20 个候选 README 摘录与 AI 判断
+        → 推荐项目、理由与可展开证据（全部样本保存本机）
 ```
 
 智能模式点击按钮或 Enter 后运行，需在设置中填入自己的 DeepSeek API Key。真实服务会产生模型用量；没有密钥也可使用原文搜索。
@@ -108,9 +109,9 @@ Windows 上用 MSVC 工具链即可。开发环境也可以使用 GNU 宿主工�
 ## 已知限制
 
 - 仅提供 Windows 安装包
-- 网络代理目前跟随系统设置，自定义代理为预留项
+- 手动代理当前支持不带账号密码的 HTTP/HTTPS 地址，暂不支持 SOCKS
 - 原文模式的描述翻译使用免费接口；V2 筛选使用用户配置的 DeepSeek
-- GitHub 登录目前为手动 PAT，OAuth 为预留项
+- GitHub 账号连接使用手动 PAT 验证，尚未实现 OAuth
 - 未做自动更新与代码签名
 - 术语库使用规则与人工映射，未实现通用语义理解或拼写纠错；常见繁体字形对照不等于完整繁简转换
 - 「支持中文」会保留为 `chinese` 检索词，但不代表已经验证仓库具备中文界面或文档
@@ -122,10 +123,10 @@ Windows 上用 MSVC 工具链即可。开发环境也可以使用 GNU 宿主工�
 pip install -r requirements.txt
 python export_lexicon.py --check
 python -m unittest discover -s tests -v
-node --test tests/frontend.test.cjs
+node --test tests/frontend.test.cjs tests/research-view.test.cjs
 cd src-tauri
 cargo fmt --check
-cargo test --locked --test core
+cargo test --locked --test core --test research_flow --test prefs_budget --test prefilter_live
 cargo check --locked
 ```
 

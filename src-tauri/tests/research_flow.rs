@@ -1,5 +1,7 @@
 #[path = "../src/policy.rs"]
 mod policy;
+#[path = "../src/prefilter.rs"]
+mod prefilter;
 #[path = "../src/research.rs"]
 mod research;
 use research::*;
@@ -94,6 +96,14 @@ fn missing_results_remain_unassessed_not_irrelevant() {
         .unwrap()
         .is_empty());
     assert!(c.assessment.is_none());
+}
+
+#[test]
+fn compact_response_keeps_verified_evidence() {
+    let rows=parse_assessments(json!({"items":[{"id":1,"v":"match","s":91,"c":"app","r":"支持离线改名","g":[],"e":[{"s":"description","q":"离线批量重命名文件"}]}]}), &[candidate()]).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].verdict, Verdict::Match);
+    assert_eq!(rows[0].evidence.len(), 1);
 }
 
 struct Server {
@@ -239,6 +249,9 @@ fn engine(base: &str) -> Engine {
             generation: Arc::new(AtomicU64::new(1)),
             id: 1,
         },
+        review_limit: 20,
+        budget: Arc::new(Mutex::new(ModelBudget::for_reviews(20))),
+        checkpoint: None,
     }
 }
 #[test]
@@ -249,15 +262,44 @@ fn complete_session_samples_both_languages_and_judges_real_ids() {
         .build()
         .unwrap();
     let progress = Mutex::new(vec![]);
+    let dir = std::env::temp_dir().join(format!(
+        "gh-finder-checkpoint-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir(&dir).unwrap();
+    struct Cleanup(std::path::PathBuf);
+    impl Drop for Cleanup {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = Cleanup(dir.clone());
+    let mut e = engine(&server.base);
+    e.checkpoint = Some(dir.clone());
     let result = runtime
-        .block_on(
-            engine(&server.base).run("中文批量重命名", 100, "test", |p| {
-                progress.lock().unwrap().push(p)
-            }),
-        )
+        .block_on(e.run("中文批量重命名", 100, "test", |p| {
+            progress.lock().unwrap().push(p)
+        }))
         .unwrap();
     assert_eq!(result.items.len(), 2);
     assert_eq!(result.stats.assessed_count, 2);
+    assert_eq!(result.stats.model_calls, 2);
+    assert_eq!(result.stats.prompt_tokens, 100);
+    assert_eq!(result.stats.completion_tokens, 60);
+    let snapshot: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("latest.json")).unwrap()).unwrap();
+    assert_eq!(snapshot["stage"], "done");
+    assert_eq!(snapshot["items"].as_array().unwrap().len(), 2);
+    assert_eq!(snapshot["stats"]["shortlisted_count"], 2);
+    assert!(dir.join("model-request-02.json").is_file());
+    assert!(dir.join("model-response-02.json").is_file());
+    for entry in std::fs::read_dir(&dir).unwrap() {
+        let text = std::fs::read_to_string(entry.unwrap().path()).unwrap();
+        assert!(!text.contains("test-github") && !text.contains("test-deepseek"));
+    }
     assert!(result.stats.duplicates >= 2);
     assert_eq!(result.items[0].repo.stars, 0);
     assert_eq!(

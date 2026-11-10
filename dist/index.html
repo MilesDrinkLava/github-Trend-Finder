@@ -646,23 +646,27 @@
         <input id="q" value="" placeholder="用中文描述你要找的项目" spellcheck="false" autocomplete="off" aria-label="搜索 GitHub 项目">
       </label>
 
-      <div class="research-toolbar">
-        <select id="searchMode" aria-label="搜索模式"><option value="smart">智能采样筛选</option><option value="raw">原文搜索</option></select>
-        <label>采样上限<select id="sampleBudget"><option>300</option><option selected>600</option><option>1200</option><option>2000</option></select></label>
-        <button class="btn primary" id="researchStart">采样并筛选</button>
-        <button class="btn" id="researchCancel" disabled>停止</button>
+      <div class="search-actions">
+        <details id="searchOptions"><summary>搜索选项</summary><div class="search-options-body">
+          <label>GitHub 检索范围<select id="sampleBudget"><option>200</option><option selected>600</option><option>1200</option><option>2000</option></select></label>
+          <label>AI 精读数量<select id="reviewLimit"><option>10</option><option selected>20</option><option>30</option></select></label>
+          <p id="reviewBudgetHint">AI 最多看 20 个项目，不会逐个分析全部检索结果。</p>
+          <label class="plain-check"><input id="githubOnly" type="checkbox">只搜索 GitHub，不使用 AI</label>
+          <div class="advanced-result-controls">
+            <label>结果范围<select id="researchFilter"><option value="recommended">推荐项目</option><option value="all">所有 GitHub 结果</option><option value="uncertain">尚待确认</option><option value="irrelevant">明显不符合</option></select></label>
+            <label>项目类型<select id="researchCategory"><option value="all">所有类型</option><option value="app">应用</option><option value="library">库</option><option value="framework">框架</option><option value="plugin">插件</option><option value="resource">资源汇总</option><option value="example">示例</option></select></label>
+            <label>排列方式<select id="researchSort"><option value="relevance">优先符合需求</option><option value="original">GitHub 初始顺序</option><option value="stars">按收藏数</option></select></label>
+          </div>
+          <p id="researchCounts"></p><p id="researchUsage"></p><p id="researchPlan"></p>
+          <button class="quiet-btn" id="researchRefresh">重新搜索（不使用缓存）</button>
+          <button class="quiet-btn" id="researchExport">另存完整结果</button>
+        </div></details>
+        <button class="btn" id="researchCancel" hidden>停止</button>
+        <button class="btn primary" id="researchStart">搜索</button>
       </div>
-      <div class="research-panel" id="researchPanel">
-        <div id="researchStatus" role="status">保留原文，扩展中英文查询，分批判断所有候选</div>
-        <div id="researchCounts"></div>
-        <div class="research-controls">
-          <select id="researchFilter" aria-label="匹配状态"><option value="all">全部样本</option><option value="recommended">相关与部分符合</option><option value="uncertain">待核实 / 未分析</option><option value="irrelevant">不相关</option></select>
-          <select id="researchCategory" aria-label="项目类别"><option value="all">全部类别</option><option value="app">应用</option><option value="library">库</option><option value="framework">框架</option><option value="plugin">插件</option><option value="resource">资源集合</option><option value="example">示例</option></select>
-          <select id="researchSort" aria-label="结果排序"><option value="relevance">相关度与热度加权</option><option value="original">原始召回顺序</option><option value="stars">Star 排序</option></select>
-          <label><input id="relevanceWeight" type="range" min="0" max="100" value="100"><span id="weightValue">100% 相关度</span></label>
-        </div>
-        <details class="research-diagnostics"><summary>检索详情与用量</summary><p id="researchUsage"></p><p id="researchPlan"></p><p id="researchWarnings"></p><button class="btn" id="researchExport">保存全部样本 JSON</button> <button class="btn" id="researchRefresh">重新采样（忽略缓存）</button></details>
-      </div>
+      <div class="research-panel" id="researchPanel"><div id="researchStatus" role="status">先从 GitHub 查找，再让 AI 精读少量候选。</div><button class="quiet-btn" id="researchSettingsLink" hidden>检查设置</button></div>
+      <div class="result-tabs" id="resultTabs" hidden><button class="on" id="showRecommendations">推荐项目</button><button id="showAllCandidates">全部 GitHub 结果</button><button class="quiet-btn samples-link" data-open-samples>打开样本文件夹</button></div>
+      <p class="research-warning" id="researchWarnings" hidden></p>
 
       <div class="filebar" id="filebar" hidden>
         静态预览，数据是写死的。真实搜索请运行 <code>python app/server.py</code>
@@ -732,34 +736,16 @@
         <h2>设置</h2>
 
         <div class="group">
-          <div class="item">
-            <div>
-              <div class="label">GitHub 账号</div>
-              <div class="sub" id="accountSub">未配置 token（10 次/分钟）</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center">
-              <input class="input" id="tokenInput" type="password" placeholder="ghp_…" style="width:132px">
-              <button class="btn primary" id="tokenSave">保存</button>
-            </div>
-          </div>
-          <div class="item">
-            <div>
-              <div class="label">网络代理（预留）</div>
-              <div class="sub">当前跟随系统代理设置</div>
-            </div>
-            <div class="seg small">
-              <button class="on" disabled>直连</button>
-              <button disabled>系统</button>
-              <button disabled>自定义</button>
-            </div>
-          </div>
-          <div class="item">
-            <div>
-              <div class="label">代理地址（预留）</div>
-              <div class="sub">后续支持 http / socks5，端口可改</div>
-            </div>
-            <input class="input" value="http://127.0.0.1:7897" disabled>
-          </div>
+          <div class="item"><div><div class="label">GitHub 账号</div><div class="sub" id="accountSub">未连接，仍可搜索公开项目</div></div><button class="btn" id="githubDisconnect">断开</button></div>
+          <div class="item settings-stack"><label for="tokenInput">使用个人访问令牌连接</label><div class="sub">连接后可提高检索额度。令牌只保存在本机。</div><div class="settings-input-row"><input class="input" id="tokenInput" type="password" autocomplete="off" placeholder="GitHub Token，留空可检查已保存的连接"><button class="btn primary" id="tokenSave">验证并连接</button><button class="quiet-btn" id="githubGetToken">获取令牌</button></div><p class="setting-feedback" id="githubFeedback" role="status"></p></div>
+        </div>
+        <div class="group">
+          <div class="item"><div><div class="label">网络连接</div><div class="sub">应用于 GitHub、DeepSeek 和描述翻译</div></div><select class="input" id="proxyMode"><option value="system">跟随系统</option><option value="direct">不使用代理</option><option value="custom">手动代理</option></select></div>
+          <div class="item settings-stack"><label for="proxyAddress">代理地址</label><div class="settings-input-row"><input class="input" id="proxyAddress" placeholder="http://127.0.0.1:7897"><button class="btn" id="networkTest">测试网络</button></div><div class="sub">仅手动代理时使用，支持 HTTP / HTTPS 代理。</div><p class="setting-feedback" id="networkFeedback" role="status"></p></div>
+        </div>
+        <div class="group">
+          <div class="item settings-stack"><label for="sampleDirectory">样本保存位置</label><div class="sub">智能搜索自动保存 GitHub 结果、AI 精读名单和用量记录。</div><div class="settings-input-row"><input class="input" id="sampleDirectory" placeholder="选择一个保存文件夹"><button class="btn" id="sampleDirectoryChoose">选择文件夹</button><button class="quiet-btn" data-open-samples>打开</button></div></div>
+          <div class="item"><p class="setting-feedback" id="preferencesFeedback" role="status"></p><button class="btn primary" id="preferencesSave">保存设置</button></div>
         </div>
 
         <div class="group">
@@ -771,25 +757,14 @@
             <button class="switch on" id="trSwitch" role="switch" aria-checked="true" aria-label="结果翻译成中文"></button>
           </div>
           <div class="item">
-            <div>
-              <div class="label">翻译引擎</div>
-              <div class="sub">免费描述翻译仅用于原文搜索；智能筛选使用下方 DeepSeek 设置</div>
-            </div>
-            <div class="seg small">
-              <button class="on">免费</button>
-              <button disabled>DeepSeek</button>
-              <button disabled>OpenAI</button>
-            </div>
-          </div>
-          <div class="item">
-            <div><div class="label">DeepSeek 智能筛选</div><div class="sub" id="deepseekStatus">尚未配置密钥</div></div>
+            <div><div class="label">AI 推荐</div><div class="sub" id="deepseekStatus">尚未配置密钥</div></div>
             <select class="input" id="deepseekModel" aria-label="DeepSeek 模型"><option value="deepseek-flash">deepseek-flash</option><option value="deepseek-v4-pro">deepseek-v4-pro</option></select>
           </div>
           <div class="item">
             <div><div class="label">DeepSeek API Key</div><div class="sub">仅保存在本机配置文件；留空保存会保留原密钥</div></div>
             <div class="deepseek-actions"><input class="input" id="deepseekKey" type="password" autocomplete="off" placeholder="sk-…"><button class="btn primary" id="deepseekSave">保存</button><button class="btn" id="deepseekClear">清除</button></div>
           </div>
-          <div class="item"><div><div class="label">检查连接</div><div class="sub">仅获取模型列表，不生成内容。采样和筛选会产生模型用量</div></div><button class="btn" id="deepseekTest">测试连接</button></div>
+          <div class="item"><div><div class="label">检查连接</div><div class="sub">仅获取模型列表，不生成内容。点击搜索才会使用 AI 用量</div></div><button class="btn" id="deepseekTest">测试连接</button></div>
         </div>
 
         <div class="group">
@@ -826,7 +801,7 @@
               </svg>
             </div>
             <div>
-              <div class="about-name">GitHub Trend &amp; Finder<span>V2.0 Alpha</span></div>
+              <div class="about-name">GitHub Trend &amp; Finder<span>V2.0 Alpha 2</span></div>
               <div class="about-sub">用中文搜 GitHub 开源项目</div>
             </div>
           </div>
@@ -841,7 +816,7 @@
 
       <footer>
         <div class="keys"><span>GitHub Trend &amp; Finder · Tauri 2</span></div>
-        <div class="status">V2.0 Alpha</div>
+        <div class="status">V2.0 Alpha 2</div>
       </footer>
     </section>
   </main>
@@ -1259,7 +1234,7 @@ $("#q").addEventListener("input", e => {
     searchRequest++;
     gen++;
     if (fetchCtl) fetchCtl.abort();
-    if (window.researchUI?.enabled()) { window.researchUI.invalidate(); return; }
+    if (window.researchUI) { window.researchUI.invalidate(); return; }
     if (!v) { liveSearch(""); return; }
     debounceT = setTimeout(() => liveSearch(v), 320);
     return;
@@ -1275,7 +1250,7 @@ $$("#empty .empty-chips button").forEach(b => {
     $("#q").value = b.dataset.q;
     $("#q").focus();
     clearTimeout(debounceT);
-    if (window.researchUI?.enabled()) window.researchUI.search();
+    if (window.researchUI) window.researchUI.search();
     else liveSearch(b.dataset.q, true);
   });
 });
@@ -1328,26 +1303,7 @@ trSwitch.addEventListener("click", e => {
   if (translateOn && !window.researchUI?.enabled()) liveSearch($("#q").value.trim(), false);
 });
 
-async function refreshTokenStatus(){
-  if (!TAURI) { $("#accountSub").textContent = "浏览器预览模式"; return; }
-  try {
-    const ok = await window.__TAURI__.core.invoke("token_status");
-    $("#accountSub").textContent = ok ? "已配置 token（30 次/分钟）" : "未配置 token（10 次/分钟）";
-  } catch (e) {}
-}
-
-$("#tokenSave").addEventListener("click", async () => {
-  const v = $("#tokenInput").value.trim();
-  if (!v) return;
-  try {
-    await window.__TAURI__.core.invoke("save_token", {token: v});
-    $("#tokenInput").value = "";
-    hotCache.clear();
-    await refreshTokenStatus();
-  } catch (e) {
-    setNote("token 保存失败", true);
-  }
-});
+window.addEventListener("app-settings-updated", () => { hotCache.clear(); window.researchUI?.invalidate(); });
 
 document.addEventListener("keydown", e => {
   // 中文输入法用 Enter 上屏时不要触发打开；229 是部分输入法的兼容键码。
@@ -1388,7 +1344,7 @@ if (TAURI || LIVE){
     const { invoke } = window.__TAURI__.core;
     $("#winMin").addEventListener("click", () => invoke("win_minimize"));
     $("#winClose").addEventListener("click", () => invoke("win_close"));
-    refreshTokenStatus();
+
   }
   liveSearch($("#q").value.trim(), true);
 } else {
@@ -1398,5 +1354,6 @@ if (TAURI || LIVE){
 </script>
 <script src="research-view.js"></script>
 <script src="research.js"></script>
+<script src="settings.js"></script>
 </body>
 </html>

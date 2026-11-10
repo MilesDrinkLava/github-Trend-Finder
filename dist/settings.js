@@ -1,0 +1,18 @@
+(() => {
+  const $=s=>document.querySelector(s),native=!!window.__TAURI__,invoke=(n,a)=>window.__TAURI__.core.invoke(n,a);
+  const message=(id,t)=>{$('#'+id).textContent=String(t||'');};
+  async function account(){const s=await invoke('github_status');$('#accountSub').textContent=s.connected?(s.login?`已连接 ${s.login}`:'已保存 Token，可点击验证连接'):'未连接，仍可搜索公开项目';$('#githubDisconnect').disabled=!s.connected;}
+  async function model(){const s=await invoke('model_settings');$('#deepseekModel').value=s.model;$('#deepseekStatus').textContent=s.configured?'已配置密钥，搜索时按精读预算调用':'尚未配置密钥';}
+  async function refresh(){if(!native)return;try{const p=await invoke('app_preferences');$('#proxyMode').value=p.proxy_mode;$('#proxyAddress').value=p.proxy_url;$('#sampleDirectory').value=p.sample_dir;await account();await model();}catch(e){message('preferencesFeedback',e);}}
+  $('#tokenSave').addEventListener('click',async()=>{if(!native)return;const b=$('#tokenSave');b.disabled=true;message('githubFeedback','正在向 GitHub 验证…');try{const s=await invoke('connect_github',{token:$('#tokenInput').value});$('#tokenInput').value='';message('githubFeedback',`已连接 ${s.login}`);await account();window.dispatchEvent(new Event('app-settings-updated'));}catch(e){message('githubFeedback',e);}finally{b.disabled=false;}});
+  $('#githubDisconnect').addEventListener('click',async()=>{if(!native)return;try{await invoke('disconnect_github');await account();message('githubFeedback','已断开，将使用匿名检索。');window.dispatchEvent(new Event('app-settings-updated'));}catch(e){message('githubFeedback',e);}});
+  $('#githubGetToken').addEventListener('click',()=>{if(native)invoke('open_url',{url:'https://github.com/settings/tokens'});});
+  $('#sampleDirectoryChoose').addEventListener('click',async()=>{if(!native)return;try{const path=await invoke('choose_sample_directory');if(path){$('#sampleDirectory').value=path;message('preferencesFeedback','已选位置，请点击保存设置。');}}catch(e){message('preferencesFeedback',e);}});
+  document.querySelectorAll('[data-open-samples]').forEach(b=>b.addEventListener('click',async()=>{if(!native)return;try{await invoke('open_samples_folder');}catch(e){message('preferencesFeedback',e);}}));
+  $('#preferencesSave').addEventListener('click',async()=>{if(!native)return;const b=$('#preferencesSave');b.disabled=true;try{const p=await invoke('save_app_preferences',{proxyMode:$('#proxyMode').value,proxyUrl:$('#proxyAddress').value,sampleDir:$('#sampleDirectory').value});$('#sampleDirectory').value=p.sample_dir;message('preferencesFeedback','已保存。后续请求使用新的网络和样本设置。');window.dispatchEvent(new Event('app-settings-updated'));}catch(e){message('preferencesFeedback',e);}finally{b.disabled=false;}});
+  $('#networkTest').addEventListener('click',async()=>{if(!native)return;const b=$('#networkTest');b.disabled=true;message('networkFeedback','正在使用当前选择的方式连接 GitHub…');try{message('networkFeedback',await invoke('test_network',{proxyMode:$('#proxyMode').value,proxyUrl:$('#proxyAddress').value}));}catch(e){message('networkFeedback',e);}finally{b.disabled=false;}});
+  async function saveModel(clear=false){if(!native)return;try{await invoke('save_model_settings',{apiKey:$('#deepseekKey').value,model:$('#deepseekModel').value,clearKey:clear});$('#deepseekKey').value='';await model();}catch(e){message('deepseekStatus',e);}}
+  $('#deepseekSave').addEventListener('click',()=>saveModel());$('#deepseekClear').addEventListener('click',()=>saveModel(true));
+  $('#deepseekTest').addEventListener('click',async()=>{if(!native)return;message('deepseekStatus','正在检查模型连接…');try{message('deepseekStatus',await invoke('test_model_connection'));}catch(e){message('deepseekStatus',e);}});
+  window.settingsUI={refresh};refresh();
+})();

@@ -1,7 +1,11 @@
+mod connections;
 mod lexicon;
 mod model_config;
 mod policy;
+mod preferences;
+mod prefilter;
 mod research;
+mod settings_commands;
 use policy::retry_delay;
 
 use std::collections::HashMap;
@@ -21,7 +25,7 @@ const CACHE_TTL: Duration = Duration::from_secs(6 * 3600);
 
 pub struct AppState {
     lex: Lexicon,
-    client: reqwest::Client,
+    client: Mutex<reqwest::Client>,
     cache: Mutex<HashMap<String, (Instant, Vec<Item>)>>,
     request_gate: Arc<tokio::sync::Mutex<Instant>>,
     research_generation: Arc<AtomicU64>,
@@ -157,6 +161,20 @@ fn migrate_legacy_token() {
 }
 
 fn load_token() -> Option<String> {
+    if preferences::load()
+        .map(|p| p.github_disconnected)
+        .unwrap_or(false)
+    {
+        return None;
+    }
+    if let Ok(dir) = preferences::config_dir() {
+        if let Ok(v) = std::fs::read_to_string(dir.join("token.txt")) {
+            if !v.trim().is_empty() {
+                return Some(v.trim().into());
+            }
+        }
+    }
+
     if let Ok(t) = std::env::var("GH_FINDER_TOKEN") {
         let t = t.trim().to_string();
         if !t.is_empty() && !t.contains('/') && !t.contains('\\') {
@@ -185,6 +203,12 @@ fn short_error(status: u16) -> String {
 
 // 搜索与发现共享配额和在途锁。缓存按凭据、条数、排序隔离；排队旧查询不会继续烧配额。
 impl AppState {
+    fn http_client(&self) -> reqwest::Client {
+        self.client
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
     async fn github_items(
         &self,
         q: &str,
@@ -228,7 +252,7 @@ impl AppState {
         }
         *next = Instant::now() + Duration::from_millis(if token.is_some() { 2100 } else { 6200 });
         let mut req = self
-            .client
+            .http_client()
             .get(API)
             .query(&[
                 ("q", q.to_string()),
@@ -337,6 +361,7 @@ async fn smart_search(
     query: String,
     target: Option<usize>,
     refresh: Option<bool>,
+    review_limit: Option<usize>,
     session: String,
     app: tauri::AppHandle,
 ) -> Result<research::ResearchResult, String> {
@@ -356,9 +381,19 @@ async fn smart_search(
         return Err("请先在设置中保存 DeepSeek API Key，或切换原文搜索".into());
     }
     let target = target.unwrap_or(600).clamp(100, 2000);
+    let review_limit = review_limit.unwrap_or(20).clamp(5, 30);
+    let sample_directory = preferences::session_directory(&preferences::load()?.sample_dir)?;
     let github_token = load_token();
     let mut scope = std::collections::hash_map::DefaultHasher::new();
-    (query, target, &config.model, &config.api_key, &github_token).hash(&mut scope);
+    (
+        query,
+        target,
+        review_limit,
+        &config.model,
+        &config.api_key,
+        &github_token,
+    )
+        .hash(&mut scope);
     let cache_key = scope.finish().to_string();
     if refresh.unwrap_or(false) {
         if let Ok(mut cache) = state.research_results.lock() {
@@ -378,25 +413,30 @@ async fn smart_search(
     };
     if let Some(mut result) = cached {
         result.session = session;
+        result.sample_directory = Some(sample_directory.to_string_lossy().into());
         result.source = "cache".into();
         result.stats.model_calls = 0;
         result.stats.prompt_tokens = 0;
         result.stats.completion_tokens = 0;
+        result.stats.model_input_bytes = 0;
+        std::fs::write(
+            sample_directory.join("latest.json"),
+            serde_json::to_vec_pretty(&result).map_err(|_| "样本编码失败")?,
+        )
+        .map_err(|_| "无法保存缓存样本")?;
         return Ok(result);
     }
     let engine = research::Engine {
-        client: reqwest::Client::builder()
-            .timeout(Duration::from_secs(30))
-            .redirect(reqwest::redirect::Policy::none())
-            .user_agent(concat!("gh-finder/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|_| "初始化研究客户端失败")?,
+        client: state.http_client(),
         endpoints: research::Endpoints::default(),
         github_token,
         api_key: config.api_key,
         model: config.model,
         gate: state.request_gate.clone(),
         cache: state.research_cache.clone(),
+        review_limit,
+        budget: Arc::new(Mutex::new(research::ModelBudget::for_reviews(review_limit))),
+        checkpoint: Some(sample_directory),
         cancel: research::Cancellation {
             generation: state.research_generation.clone(),
             id,
@@ -408,7 +448,7 @@ async fn smart_search(
     let result = tokio::time::timeout(Duration::from_secs(900), run)
         .await
         .map_err(|_| "已到 15 分钟会话上限，当前已显示的样本仍可查看".to_string())??;
-    if result.warnings.is_empty() && result.stats.assessed_count == result.items.len() {
+    if result.warnings.is_empty() && result.stats.assessed_count == result.stats.shortlisted_count {
         if let Ok(mut cache) = state.research_results.lock() {
             if cache.len() >= 8 {
                 cache.clear();
@@ -457,8 +497,7 @@ fn export_research(payload: String) -> Result<String, String> {
     {
         return Err("样本数量无效".into());
     }
-    let root = PathBuf::from(std::env::var("USERPROFILE").map_err(|_| "找不到用户目录")?)
-        .join("Downloads");
+    let root = preferences::prepare_directory(&preferences::load()?.sample_dir)?;
     std::fs::create_dir_all(&root).map_err(|_| "创建下载目录失败")?;
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -469,15 +508,14 @@ fn export_research(payload: String) -> Result<String, String> {
     Ok(path.display().to_string())
 }
 #[tauri::command]
-async fn test_model_connection() -> Result<String, String> {
+async fn test_model_connection(app: tauri::AppHandle) -> Result<String, String> {
     let config = model_config::load()?;
     if config.api_key.is_empty() {
         return Err("请先保存 DeepSeek API Key".into());
     }
-    let response = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .map_err(|_| "初始化连接失败")?
+    let response = app
+        .state::<AppState>()
+        .http_client()
         .get("https://api.deepseek.com/models")
         .timeout(Duration::from_secs(20))
         .bearer_auth(&config.api_key)
@@ -657,7 +695,7 @@ async fn translate(texts: Vec<String>, app: tauri::AppHandle) -> Vec<String> {
     }
 
     // 限流并发：一次最多 6 个请求，免费接口不容易被掐。
-    let client = state.client.clone();
+    let client = state.http_client();
     let jobs: Vec<(usize, String)> = pending.iter().map(|&i| (i, texts[i].clone())).collect();
     let results: Vec<(usize, Option<String>)> =
         futures_util::stream::iter(jobs.into_iter().map(|(i, text)| {
@@ -719,16 +757,13 @@ fn win_close(window: tauri::WebviewWindow) -> Result<(), String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     migrate_legacy_token();
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .user_agent(concat!("gh-finder/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .unwrap_or_default();
+    let client = preferences::client(&preferences::load().unwrap_or_default())
+        .expect("无法初始化网络客户端");
 
     tauri::Builder::default()
         .manage(AppState {
             lex: Lexicon::load(),
-            client,
+            client: Mutex::new(client),
             cache: Mutex::new(HashMap::new()),
             request_gate: Arc::new(tokio::sync::Mutex::new(Instant::now())),
             research_generation: Arc::new(AtomicU64::new(0)),
@@ -747,6 +782,14 @@ pub fn run() {
             save_model_settings,
             test_model_connection,
             export_research,
+            settings_commands::app_preferences,
+            settings_commands::save_app_preferences,
+            settings_commands::choose_sample_directory,
+            settings_commands::open_samples_folder,
+            settings_commands::test_network,
+            settings_commands::github_status,
+            settings_commands::connect_github,
+            settings_commands::disconnect_github,
             trending,
             translate,
             token_status,

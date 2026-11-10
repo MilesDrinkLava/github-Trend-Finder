@@ -24,4 +24,11 @@ test('filters and weights do not mutate or remove original samples',()=>{
 test('new frontend scripts parse',()=>{
   const fs=require('node:fs'), vm=require('node:vm'), path=require('node:path');
   assert.doesNotThrow(()=>new vm.Script(fs.readFileSync(path.join(__dirname,'../dist/research.js'),'utf8')));
+  assert.doesNotThrow(()=>new vm.Script(fs.readFileSync(path.join(__dirname,'../dist/settings.js'),'utf8')));
+});
+
+test('GitHub shortlist controls recommendations without dropping the raw pool',()=>{
+  const candidates=rows.map(x=>({...x,selected_for_ai:x.id!==3,prefilter_score:1/x.id}));
+  assert.deepEqual(select(candidates,'recommended').map(x=>x.id),[1]);
+  assert.equal(select(candidates,'all').length,3);
 });
